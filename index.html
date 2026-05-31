@@ -13,9 +13,6 @@
           <p class="eyebrow">Wake the vision. Run the day.</p>
           <h1>LIFE OS</h1>
         </div>
-        <div class="header-meta">
-          <div class="date-pill" id="current-date-display"></div>
-        </div>
       </header>
 
       <div class="floating-progress hidden" id="floating-progress">
@@ -113,16 +110,16 @@
           <div class="screen-grid">
             <article class="card morning-card span-two">
               <div class="section-heading">
-                <h3>朝ルーティン</h3>
-              </div>
-              <div id="morning-routine-list" class="routine-list"></div>
-            </article>
-
-            <article class="card morning-card">
-              <div class="section-heading">
                 <h3>今週の目標</h3>
               </div>
               <textarea id="week-goal" rows="2" placeholder="今週のテーマ / 最優先KPIを短く書く"></textarea>
+            </article>
+
+            <article class="card morning-card span-two">
+              <div class="section-heading">
+                <h3>朝ルーティン</h3>
+              </div>
+              <div id="morning-routine-list" class="routine-list"></div>
             </article>
 
             <article class="card morning-card span-two">
@@ -147,7 +144,7 @@
           </div>
 
           <div class="toolbar">
-            <button class="primary-button" data-screen="dayOps" type="button">1日をはじめる</button>
+            <button class="primary-button launch-day-button" data-screen="dayOps" type="button">1日をはじめる</button>
           </div>
         </section>
 
@@ -155,19 +152,19 @@
           <div class="screen-grid">
             <article class="card span-two">
               <div class="section-heading">
-                <h3>今日の最重要3つ</h3>
+                <h3>前日からの引き継ぎ</h3>
               </div>
-              <div class="task-focus-list" id="task-focus-list"></div>
-              <div class="action-row compact-row">
-                <button class="ghost-button" data-screen="today" type="button">Morningで編集</button>
-              </div>
+              <div class="task-handoff-card" id="task-handoff-card"></div>
             </article>
 
             <article class="card span-two">
               <div class="section-heading">
-                <h3>前日からの引き継ぎ</h3>
+                <h3>今日の最重要3つ</h3>
               </div>
-              <div class="task-handoff-card" id="task-handoff-card"></div>
+              <div class="task-focus-list" id="task-focus-list"></div>
+              <div class="action-row compact-row">
+                <button class="ghost-button task-focus-edit-button" data-screen="today" type="button">Morningで編集</button>
+              </div>
             </article>
 
             <article class="card span-two task-section" id="task-section-contact">
@@ -274,16 +271,22 @@
                 </div>
                 <div class="action-row compact-row hidden" id="task-form-actions">
                   <button class="secondary-button" data-dayops-add="task" id="task-form-submit-button" type="button">タスクを追加</button>
-                  <button class="ghost-button hidden" data-task-edit-cancel type="button">編集をやめる</button>
                 </div>
               </div>
             </article>
 
             <article class="card span-two">
               <div class="section-heading">
-                <h3>支出メモ</h3>
+                <h3>タイムライン</h3>
               </div>
-              <textarea id="expense-memo" rows="7" placeholder="発生した支出を雑にメモしておく"></textarea>
+              <div class="timeline-list" id="task-timeline-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <h3>メモ</h3>
+              </div>
+              <textarea id="expense-memo" rows="7" placeholder="支出や気づいたことを雑にメモしておく"></textarea>
             </article>
           </div>
 

@@ -168,8 +168,8 @@ const state = {
       schedule121: false,
       task: false,
     },
-    editingDayOpsType: null,
-    editingDayOpsItemId: null,
+    reschedulingTaskId: null,
+    reschedulingTaskValue: "",
   },
 };
 
@@ -386,6 +386,14 @@ function formatDateLabel(dateKey) {
     weekday: "short",
   });
   return `${datePart} (${weekday})`;
+}
+
+function formatMorningHeaderDate(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const weekday = date.toLocaleDateString("ja-JP", {
+    weekday: "short",
+  });
+  return `${dateKey} (${weekday})`;
 }
 
 function formatCountdown(seconds) {
@@ -664,8 +672,8 @@ function ensureTaskUiState(log = getCurrentLog()) {
     schedule121: false,
     task: false,
   };
-  state.ui.editingDayOpsType = null;
-  state.ui.editingDayOpsItemId = null;
+  state.ui.reschedulingTaskId = null;
+  state.ui.reschedulingTaskValue = "";
 }
 
 function toggleTaskSection(type) {
@@ -680,40 +688,101 @@ function toggleTaskForm(type) {
   if (state.ui.taskForms[type]) {
     state.ui.taskSections[type] = true;
   }
-  if (type !== DAY_OPS_TYPES.task || !state.ui.taskForms[type]) {
-    state.ui.editingDayOpsType = null;
-    state.ui.editingDayOpsItemId = null;
-  }
   renderDayOps();
 }
 
-function resetTaskEditState(clearDraft = true) {
-  state.ui.editingDayOpsType = null;
-  state.ui.editingDayOpsItemId = null;
-  if (clearDraft) {
-    state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
-  }
+function resetTaskDraft() {
+  state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
 }
 
-function startDayOpsEdit(type, id) {
-  if (type !== DAY_OPS_TYPES.task) {
-    return;
-  }
+function startTaskReschedule(id) {
   const item = getCurrentLog().dayOps.tasks.find((entry) => entry.id === id);
   if (!item) {
     return;
   }
-  state.dayOpsDrafts.task = {
-    title: item.title || "",
-    goal: item.goal || "",
-    estimatedMinutes: item.estimatedMinutes || "",
-    when: item.when || "",
-  };
-  state.ui.editingDayOpsType = type;
-  state.ui.editingDayOpsItemId = id;
+  state.ui.reschedulingTaskId = id;
+  state.ui.reschedulingTaskValue = item.when || "";
   state.ui.taskSections.task = true;
-  state.ui.taskForms.task = true;
   renderDayOps();
+}
+
+function cancelTaskReschedule() {
+  state.ui.reschedulingTaskId = null;
+  state.ui.reschedulingTaskValue = "";
+  renderDayOps();
+}
+
+function saveTaskReschedule(id) {
+  const item = getCurrentLog().dayOps.tasks.find((entry) => entry.id === id);
+  if (!item) {
+    return;
+  }
+  item.when = state.ui.reschedulingTaskValue.trim();
+  item.updatedAt = new Date().toISOString();
+  state.ui.reschedulingTaskId = null;
+  state.ui.reschedulingTaskValue = "";
+  persistDailyLogs(true);
+  renderDayOps();
+}
+
+function parseTimelineOrder(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return { sortable: false, sortValue: Number.MAX_SAFE_INTEGER, label: text };
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return { sortable: false, sortValue: Number.MAX_SAFE_INTEGER, label: text };
+  }
+  return { sortable: true, sortValue: hours * 60 + minutes, label: text };
+}
+
+function renderTaskTimeline() {
+  const container = document.getElementById("task-timeline-list");
+  const timelineItems = getCurrentLog().dayOps.tasks
+    .filter((item) => item.status !== "done" && String(item.when || "").trim())
+    .map((item, index) => ({
+      item,
+      order: parseTimelineOrder(item.when),
+      index,
+    }))
+    .sort((left, right) => {
+      if (left.order.sortable && right.order.sortable) {
+        return left.order.sortValue - right.order.sortValue;
+      }
+      if (left.order.sortable) {
+        return -1;
+      }
+      if (right.order.sortable) {
+        return 1;
+      }
+      return left.index - right.index;
+    });
+
+  if (!timelineItems.length) {
+    container.innerHTML = '<div class="dayops-empty">まだ時間指定のあるタスクはありません。</div>';
+    return;
+  }
+
+  container.innerHTML = timelineItems
+    .map(
+      ({ item, order }) => `
+        <article class="timeline-item status-${item.status}">
+          <div class="timeline-time">${escapeHtml(order.label || "未設定")}</div>
+          <div class="timeline-card">
+            <h4>${escapeHtml(buildDayOpsTitle(item))}</h4>
+            <p>${escapeHtml(item.goal || "ゴール未設定")}</p>
+            <div class="dayops-item-meta">
+              <span class="status-badge status-${item.status}">${escapeHtml(getDayOpsStatusLabel(item.status))}</span>
+              ${item.estimatedMinutes ? `<span class="meta-chip">${escapeHtml(item.estimatedMinutes)}分</span>` : ""}
+            </div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function showScreen(screen) {
@@ -869,57 +938,65 @@ function renderTaskHandoffCard() {
     items: items.filter((item) => Boolean(item.carriedOverFrom)),
   }));
   const totalCarryOver = carryOverGroups.reduce((sum, entry) => sum + entry.items.length, 0);
-  const items = [
-    {
-      label: "今日のアクション",
-      value: yesterdayLog ? yesterdayLog.reflection.nextAction : "",
-    },
-    {
-      label: "昨日のリマインド",
-      value: yesterdayLog ? yesterdayLog.tomorrowReminder.map((item) => item.text).filter(Boolean).join(" / ") : "",
-    },
-  ];
+  const actionValue = yesterdayLog ? yesterdayLog.reflection.nextAction.trim() : "";
+  const reminderValues = yesterdayLog ? yesterdayLog.tomorrowReminder.map((item) => item.text.trim()).filter(Boolean) : [];
+  const contentBlocks = [];
 
-  handoff.innerHTML = `
-    ${items
-    .map(
-      (item) => `
-        <div class="task-handoff-block">
-          <strong>${escapeHtml(item.label)}</strong>
-          <p>${escapeHtml(item.value || "データなし")}</p>
-        </div>
-      `
-    )
-    .join("")}
-    <div class="task-handoff-block">
-      <strong>持ち越しタスク</strong>
-      <p>${totalCarryOver ? `${totalCarryOver}件を引き継ぎ` : "持ち越しなし"}</p>
-      <div class="task-handoff-chips">
-        ${carryOverGroups
-          .map(
-            (entry) => `
-              <span class="meta-chip ${entry.items.length ? "has-items" : ""}">
-                ${escapeHtml(entry.label)} ${entry.items.length}件
-              </span>
-            `
-          )
-          .join("")}
+  if (actionValue) {
+    contentBlocks.push(`
+      <div class="task-handoff-block compact">
+        <strong>今日のアクション</strong>
+        <p>${escapeHtml(actionValue)}</p>
       </div>
-      ${
-        totalCarryOver
-          ? `<div class="task-handoff-list">
-              ${carryOverGroups
-                .flatMap((entry) =>
-                  entry.items.map(
-                    (item) => `<p>${escapeHtml(entry.label)}: ${escapeHtml(buildDayOpsTitle(item))}</p>`
-                  )
-                )
-                .join("")}
-            </div>`
-          : ""
-      }
-    </div>
-  `;
+    `);
+  }
+
+  if (reminderValues.length) {
+    contentBlocks.push(`
+      <div class="task-handoff-block compact">
+        <strong>昨日のリマインド</strong>
+        <div class="task-handoff-chip-row">
+          ${reminderValues.map((value) => `<span class="meta-chip">${escapeHtml(value)}</span>`).join("")}
+        </div>
+      </div>
+    `);
+  }
+
+  if (totalCarryOver) {
+    contentBlocks.push(`
+      <div class="task-handoff-block compact carryover">
+        <div class="task-handoff-head">
+          <strong>持ち越しタスク</strong>
+          <span class="meta-chip has-items">${totalCarryOver}件</span>
+        </div>
+        <div class="task-handoff-chip-row">
+          ${carryOverGroups
+            .filter((entry) => entry.items.length)
+            .map(
+              (entry) => `
+                <span class="meta-chip has-items">
+                  ${escapeHtml(entry.label)} ${entry.items.length}件
+                </span>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="task-handoff-list">
+          ${carryOverGroups
+            .flatMap((entry) =>
+              entry.items.map(
+                (item) => `<p><span>${escapeHtml(entry.label)}</span>${escapeHtml(buildDayOpsTitle(item))}</p>`
+              )
+            )
+            .join("")}
+        </div>
+      </div>
+    `);
+  }
+
+  handoff.innerHTML = contentBlocks.length
+    ? contentBlocks.join("")
+    : '<div class="task-handoff-empty">昨日から引き継ぐものはありません。</div>';
 }
 
 function renderReminders() {
@@ -1003,7 +1080,7 @@ function renderSaveFabVisibility() {
 function renderToday() {
   const log = getCurrentLog();
   syncPrimaryMit(log);
-  document.getElementById("today-title").textContent = `${formatDateLabel(state.currentDateKey)} Morning`;
+  document.getElementById("today-title").textContent = formatMorningHeaderDate(state.currentDateKey);
   document.getElementById("week-goal").value = log.weekGoal;
   document.getElementById("mit1").value = log.mit.mit1;
   document.getElementById("mit2").value = log.mit.mit2;
@@ -1049,10 +1126,13 @@ function renderTaskSection(type, items) {
   if (toggleButton) {
     toggleButton.textContent = formOpen ? "入力を閉じる" : "+ 追加する";
   }
-  summary.innerHTML = `
-    <span class="task-summary-pill ${items.length ? "has-items" : ""}">${items.length}件</span>
-    ${unresolvedCount ? `<span class="task-summary-pill is-alert">未整理${unresolvedCount}</span>` : ""}
-  `;
+  summary.innerHTML = [
+    items.length ? `<span class="task-summary-pill has-items">${items.length}件</span>` : "",
+    unresolvedCount ? `<span class="task-summary-pill is-alert">未整理${unresolvedCount}</span>` : "",
+  ]
+    .filter(Boolean)
+    .join("");
+  summary.classList.toggle("is-empty", !items.length && !unresolvedCount);
 }
 
 function getDayOpsStatusLabel(status) {
@@ -1111,7 +1191,7 @@ function renderDayOpsList(containerId, items, type) {
       const isOpen = item.status === "open";
       const isDone = item.status === "done";
       const isCarryOver = item.status === "carryOver";
-      const isEditing = state.ui.editingDayOpsItemId === item.id && state.ui.editingDayOpsType === type;
+      const isRescheduling = state.ui.reschedulingTaskId === item.id;
       return `
         <article class="dayops-item status-${item.status}">
           <div class="dayops-item-header">
@@ -1127,13 +1207,24 @@ function renderDayOpsList(containerId, items, type) {
             <button class="subtle-button ${isDone ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:done" data-status-action="done" type="button">完了</button>
             <button class="subtle-button ${isCarryOver ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:carryOver" data-status-action="carryOver" type="button">明日に回す</button>
             <button class="subtle-button ${isOpen ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:reset" data-status-action="reset" type="button" ${isOpen ? "disabled" : ""}>戻す</button>
-            ${
-              type === DAY_OPS_TYPES.task
-                ? `<button class="ghost-button ${isEditing ? "is-active" : ""}" data-dayops-edit="${type}:${item.id}" type="button">編集</button>`
-                : ""
-            }
             <button class="ghost-button danger-button" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
           </div>
+          ${
+            type === DAY_OPS_TYPES.task && isRescheduling
+              ? `<div class="task-reschedule-panel">
+                  <label>
+                    <span>いつやる</span>
+                    <input type="text" data-task-reschedule-input="${item.id}" value="${escapeHtml(
+                      state.ui.reschedulingTaskValue
+                    )}" placeholder="明日 10:00 / 営業前 / 移動中" />
+                  </label>
+                  <div class="action-row compact-row">
+                    <button class="secondary-button" data-task-reschedule-save="${item.id}" type="button">保存</button>
+                    <button class="ghost-button" data-task-reschedule-cancel type="button">キャンセル</button>
+                  </div>
+                </div>`
+              : ""
+          }
         </article>
       `;
     })
@@ -1155,14 +1246,14 @@ function renderDayOps() {
   document.getElementById("task-estimated-minutes").value = state.dayOpsDrafts.task.estimatedMinutes;
   document.getElementById("task-when").value = state.dayOpsDrafts.task.when;
   document.getElementById("expense-memo").value = log.dayOps.expenseMemo;
-  document.getElementById("task-form-submit-button").textContent = state.ui.editingDayOpsItemId ? "保存する" : "タスクを追加";
-  document.querySelector("[data-task-edit-cancel]").classList.toggle("hidden", !state.ui.editingDayOpsItemId);
+  document.getElementById("task-form-submit-button").textContent = "タスクを追加";
 
-  renderTaskFocusList();
   renderTaskHandoffCard();
+  renderTaskFocusList();
   renderDayOpsList("contact-list", log.dayOps.contacts, DAY_OPS_TYPES.contact);
   renderDayOpsList("schedule121-list", log.dayOps.schedule121, DAY_OPS_TYPES.schedule121);
   renderDayOpsList("task-list", log.dayOps.tasks, DAY_OPS_TYPES.task);
+  renderTaskTimeline();
   renderTaskSection(DAY_OPS_TYPES.contact, log.dayOps.contacts);
   renderTaskSection(DAY_OPS_TYPES.schedule121, log.dayOps.schedule121);
   renderTaskSection(DAY_OPS_TYPES.task, log.dayOps.tasks);
@@ -1237,7 +1328,7 @@ function renderLogs() {
       <p>連絡: ${escapeHtml(formatDayOpsPreview(log.dayOps.contacts))}</p>
       <p>日程調整: ${escapeHtml(formatDayOpsPreview(log.dayOps.schedule121))}</p>
       <p>タスク: ${escapeHtml(formatDayOpsPreview(log.dayOps.tasks))}</p>
-      <p>支出メモ: ${escapeHtml(log.dayOps.expenseMemo || "未入力")}</p>
+      <p>メモ: ${escapeHtml(log.dayOps.expenseMemo || "未入力")}</p>
     </div>
     <div class="log-detail-block">
       <strong>明日のNEXT ACTION</strong>
@@ -1314,7 +1405,6 @@ function renderScreenVisibility() {
 }
 
 function renderApp() {
-  document.getElementById("current-date-display").textContent = formatDateLabel(state.currentDateKey);
   renderScreenVisibility();
   renderMissionCards();
   renderTimeMachineFields();
@@ -1393,7 +1483,7 @@ function buildMarkdown(log) {
     "## タスク / 作業タスク",
     ...formatMarkdownDayOps(log.dayOps.tasks, (item) => `${item.title} / ${item.goal} / ${item.estimatedMinutes}分 / ${item.when}`),
     "",
-    "## 支出メモ",
+    "## メモ",
     `- ${log.dayOps.expenseMemo}`,
     "",
     "## 夜ルーティン",
@@ -1654,20 +1744,13 @@ function addDayOpsItem(type) {
       sourceDate: log.date,
       updatedAt: now,
     };
-    if (state.ui.editingDayOpsType === type && state.ui.editingDayOpsItemId) {
-      const editingTask = log.dayOps.tasks.find((item) => item.id === state.ui.editingDayOpsItemId);
-      if (editingTask) {
-        Object.assign(editingTask, nextTaskValues);
-      }
-    } else {
-      log.dayOps.tasks.push(
-        createDefaultDayOpsItem(type, {
-          ...nextTaskValues,
-          createdAt: now,
-        })
-      );
-    }
-    resetTaskEditState(true);
+    log.dayOps.tasks.push(
+      createDefaultDayOpsItem(type, {
+        ...nextTaskValues,
+        createdAt: now,
+      })
+    );
+    resetTaskDraft();
   }
 
   state.ui.taskSections[type] = true;
@@ -1692,6 +1775,14 @@ function updateDayOpsStatus(type, id, status) {
   item.completedAt = item.status === "done" ? item.updatedAt : null;
   if (item.status !== "carryOver") {
     item.carriedForwardTo = null;
+    if (type === DAY_OPS_TYPES.task && state.ui.reschedulingTaskId === id) {
+      state.ui.reschedulingTaskId = null;
+      state.ui.reschedulingTaskValue = "";
+    }
+  }
+  if (type === DAY_OPS_TYPES.task && item.status === "carryOver") {
+    state.ui.reschedulingTaskId = id;
+    state.ui.reschedulingTaskValue = item.when || "";
   }
   persistDailyLogs(true);
   renderDayOps();
@@ -1701,8 +1792,9 @@ function updateDayOpsStatus(type, id, status) {
 function deleteDayOpsItem(type, id) {
   const bucketName = DAY_OPS_TYPE_CONFIG[type].bucket;
   getCurrentLog().dayOps[bucketName] = getCurrentLog().dayOps[bucketName].filter((item) => item.id !== id);
-  if (state.ui.editingDayOpsType === type && state.ui.editingDayOpsItemId === id) {
-    resetTaskEditState(true);
+  if (type === DAY_OPS_TYPES.task && state.ui.reschedulingTaskId === id) {
+    state.ui.reschedulingTaskId = null;
+    state.ui.reschedulingTaskValue = "";
   }
   persistDailyLogs(true);
   renderDayOps();
@@ -1800,21 +1892,18 @@ function handleClick(event) {
     return;
   }
 
-  if (target.dataset.taskEditCancel !== undefined) {
-    resetTaskEditState(true);
-    state.ui.taskForms.task = false;
-    renderDayOps();
-    return;
-  }
-
   if (target.dataset.dayopsAdd) {
     addDayOpsItem(target.dataset.dayopsAdd);
     return;
   }
 
-  if (target.dataset.dayopsEdit) {
-    const [type, id] = target.dataset.dayopsEdit.split(":");
-    startDayOpsEdit(type, id);
+  if (target.dataset.taskRescheduleSave) {
+    saveTaskReschedule(target.dataset.taskRescheduleSave);
+    return;
+  }
+
+  if (target.dataset.taskRescheduleCancel !== undefined) {
+    cancelTaskReschedule();
     return;
   }
 
@@ -1937,6 +2026,11 @@ function handleInput(event) {
   if (target.dataset.dayopsDraft) {
     const [type, field] = target.dataset.dayopsDraft.split(":");
     state.dayOpsDrafts[type][field] = target.value;
+    return;
+  }
+
+  if (target.dataset.taskRescheduleInput) {
+    state.ui.reschedulingTaskValue = target.value;
     return;
   }
 

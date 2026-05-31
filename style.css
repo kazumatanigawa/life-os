@@ -514,20 +514,43 @@ input[type="number"]:focus {
 
 .task-handoff-card {
   display: grid;
-  gap: 0.8rem;
-  padding: 0.95rem 1rem;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  gap: 0.65rem;
+  padding: 0.35rem 0;
+}
+
+.task-handoff-empty {
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--subtext);
+  text-align: center;
+}
+
+.task-handoff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.task-handoff-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .task-handoff-block {
   display: grid;
-  gap: 0.4rem;
-  padding: 0.95rem 1rem;
-  border-radius: 18px;
+  gap: 0.55rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.task-handoff-block.compact {
+  gap: 0.5rem;
 }
 
 .task-handoff-block strong {
@@ -538,13 +561,72 @@ input[type="number"]:focus {
   margin: 0;
 }
 
-.task-handoff-chips,
 .task-handoff-list {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .task-handoff-list p {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--text);
+}
+
+.task-handoff-list p span {
+  color: var(--subtext);
+  flex: 0 0 auto;
+}
+
+.timeline-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.timeline-time {
+  position: relative;
+  padding-top: 0.1rem;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.timeline-time::after {
+  content: "";
+  position: absolute;
+  top: 1.45rem;
+  left: 0.45rem;
+  width: 1px;
+  height: calc(100% + 0.55rem);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.34), transparent);
+}
+
+.timeline-item:last-child .timeline-time::after {
+  display: none;
+}
+
+.timeline-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.timeline-card h4,
+.timeline-card p {
+  margin: 0;
+}
+
+.timeline-card p {
   color: var(--subtext);
 }
 
@@ -582,6 +664,10 @@ input[type="number"]:focus {
 .task-section-summary {
   justify-content: flex-end;
   flex: 1;
+}
+
+.task-section-summary.is-empty {
+  display: none;
 }
 
 .task-summary-pill {
@@ -872,6 +958,25 @@ body.nav-visible .save-fab {
   gap: 0.65rem;
 }
 
+.task-reschedule-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(99, 146, 244, 0.22);
+  background: rgba(99, 146, 244, 0.08);
+}
+
+.task-reschedule-panel label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.task-reschedule-panel span {
+  color: #d7e4ff;
+  font-size: 0.9rem;
+}
+
 .dayops-empty {
   padding: 1rem;
   border-radius: 18px;
@@ -1099,12 +1204,51 @@ body.nav-visible .save-fab {
 
 @media (max-width: 720px) {
   .app-shell {
-    padding-inline: 0.85rem;
+    padding-inline: 0.8rem;
     padding-bottom: 8.6rem;
   }
 
   .app-header {
     flex-direction: column;
+    margin-bottom: 0.8rem;
+  }
+
+  .main-content,
+  .screen,
+  .screen-grid,
+  .routine-list,
+  .dayops-list {
+    gap: 0.8rem;
+  }
+
+  .hero-card,
+  .card,
+  .boot-panel,
+  .output-panel {
+    padding: 1rem;
+  }
+
+  .section-heading {
+    margin-bottom: 0.5rem;
+  }
+
+  .section-heading h3,
+  .section-heading h2 {
+    line-height: 1.25;
+  }
+
+  .progress-copy span,
+  .floating-progress-copy span {
+    font-size: 0.88rem;
+  }
+
+  .progress-copy strong,
+  .floating-progress-copy strong {
+    font-size: 1.25rem;
+  }
+
+  .progress-bar {
+    height: 12px;
   }
 
   .header-meta,
@@ -1135,6 +1279,67 @@ body.nav-visible .save-fab {
 
   .routine-main {
     width: 100%;
+  }
+
+  .toggle-card,
+  .routine-tile {
+    padding: 0.85rem 0.9rem 0.85rem 0.95rem;
+    gap: 0.8rem;
+  }
+
+  .routine-tile.is-collapsed {
+    padding: 0.62rem 0.78rem 0.62rem 0.82rem;
+  }
+
+  .toggle-indicator {
+    flex-basis: 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .toggle-indicator::after {
+    inset: 7px;
+  }
+
+  .routine-copy {
+    gap: 0.12rem;
+  }
+
+  .routine-name,
+  .routine-label {
+    font-size: 0.96rem;
+  }
+
+  .routine-hint,
+  .routine-state {
+    font-size: 0.78rem;
+  }
+
+  #week-goal {
+    min-height: 58px;
+    padding: 0.82rem 0.9rem;
+  }
+
+  .stack-fields label {
+    gap: 0.35rem;
+  }
+
+  .stack-fields span,
+  .dayops-form-grid span,
+  .settings-field span {
+    font-size: 0.84rem;
+  }
+
+  #mit1,
+  #mit2,
+  #mit3 {
+    padding: 0.82rem 0.88rem;
+  }
+
+  .launch-day-button {
+    min-height: 50px;
+    padding-block: 0.82rem;
   }
 
   .reminder-input-row,
@@ -1179,7 +1384,16 @@ body.nav-visible .save-fab {
   .dayops-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
+    gap: 0.5rem;
+  }
+
+  .timeline-item {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .timeline-time::after {
+    display: none;
   }
 
   .task-section-header {
@@ -1191,8 +1405,70 @@ body.nav-visible .save-fab {
     justify-content: flex-start;
   }
 
-  #week-goal {
-    min-height: 70px;
+  .task-focus-list {
+    gap: 0.55rem;
+  }
+
+  .task-focus-item {
+    padding: 0.72rem 0.8rem;
+    gap: 0.65rem;
+    border-radius: 16px;
+  }
+
+  .task-focus-item p {
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .task-focus-index {
+    width: 24px;
+    height: 24px;
+    font-size: 0.84rem;
+  }
+
+  .task-focus-edit-button {
+    width: auto !important;
+    min-height: 38px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.84rem;
+  }
+
+  .task-handoff-card {
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+  }
+
+  .task-handoff-block,
+  .task-handoff-empty,
+  .timeline-card {
+    padding: 0.75rem 0.82rem;
+    border-radius: 14px;
+  }
+
+  .task-handoff-list {
+    gap: 0.35rem;
+  }
+
+  .task-handoff-list p {
+    gap: 0.45rem;
+    font-size: 0.9rem;
+  }
+
+  .task-summary-pill {
+    padding: 0.28rem 0.55rem;
+    font-size: 0.74rem;
+  }
+
+  .task-section {
+    gap: 0.7rem;
+  }
+
+  .task-section-header h3 {
+    font-size: 1rem;
+  }
+
+  .task-section-body {
+    gap: 0.7rem;
   }
 
   .dayops-actions .subtle-button,
@@ -1203,14 +1479,34 @@ body.nav-visible .save-fab {
   }
 
   .dayops-item {
-    padding: 0.9rem;
+    padding: 0.78rem;
+    gap: 0.75rem;
+    border-radius: 16px;
+  }
+
+  .dayops-item-title {
+    font-size: 0.97rem;
+  }
+
+  .dayops-item-meta {
+    gap: 0.42rem;
+  }
+
+  .meta-chip,
+  .status-badge {
+    padding: 0.3rem 0.58rem;
+    font-size: 0.76rem;
   }
 
   .dayops-form-grid {
-    gap: 0.7rem;
+    gap: 0.62rem;
   }
 
   .dayops-list {
-    gap: 0.8rem;
+    gap: 0.68rem;
+  }
+
+  .toolbar > .launch-day-button {
+    width: 100%;
   }
 }
