@@ -572,7 +572,16 @@ function shouldShowBootOnLaunch() {
 }
 
 function scrollToTop() {
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+}
+
+function forceScrollTop() {
+  scrollToTop();
+  window.requestAnimationFrame(() => {
+    scrollToTop();
+  });
 }
 
 function initializeState() {
@@ -620,7 +629,7 @@ function showScreen(screen) {
     renderScreenVisibility();
     renderFloatingProgressVisibility();
     renderSaveFabVisibility();
-    scrollToTop();
+    forceScrollTop();
     return;
   }
 
@@ -628,7 +637,7 @@ function showScreen(screen) {
   renderScreenVisibility();
   renderFloatingProgressVisibility();
   renderSaveFabVisibility();
-  scrollToTop();
+  forceScrollTop();
 }
 
 function setBootUnlocked() {
@@ -1779,7 +1788,7 @@ function boot() {
   initializeState();
   attachListeners();
   renderApp();
-  scrollToTop();
+  forceScrollTop();
 }
 
 boot();

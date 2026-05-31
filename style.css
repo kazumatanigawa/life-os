@@ -865,7 +865,7 @@ body.nav-visible .save-fab {
 @media (max-width: 720px) {
   .app-shell {
     padding-inline: 0.85rem;
-    padding-bottom: 10rem;
+    padding-bottom: 8.6rem;
   }
 
   .app-header {
@@ -877,9 +877,13 @@ body.nav-visible .save-fab {
     width: 100%;
   }
 
-  .primary-button,
-  .secondary-button,
-  .ghost-button {
+  .toolbar > .primary-button,
+  .toolbar > .secondary-button,
+  .toolbar > .ghost-button,
+  .action-row > .primary-button,
+  .action-row > .secondary-button,
+  .action-row > .ghost-button,
+  .reminder-input-row > .secondary-button {
     width: 100%;
   }
 
@@ -904,22 +908,61 @@ body.nav-visible .save-fab {
   }
 
   .app-nav {
-    width: calc(100% - 1.2rem);
+    width: calc(100% - 1rem);
     justify-content: space-between;
+    gap: 0.2rem;
+    padding: 0.3rem;
+    bottom: 0.7rem;
+    border-radius: 22px;
   }
 
   .nav-button {
     flex: 1;
     min-width: 0;
-    font-size: 0.83rem;
+    min-height: 40px;
+    padding: 0.55rem 0.35rem;
+    font-size: 0.74rem;
+    border-radius: 14px;
   }
 
   .save-fab {
     right: 0.85rem;
     left: auto;
+    min-height: 46px;
+    padding: 0.72rem 0.92rem;
+    font-size: 0.88rem;
   }
 
   body.nav-visible .save-fab {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 5.9rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.8rem);
+  }
+
+  .toast {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 7.6rem);
+  }
+
+  .dayops-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .dayops-actions .subtle-button,
+  .dayops-actions .ghost-button {
+    width: 100%;
+    min-height: 42px;
+    padding: 0.7rem 0.6rem;
+  }
+
+  .dayops-item {
+    padding: 0.9rem;
+  }
+
+  .dayops-form-grid {
+    gap: 0.7rem;
+  }
+
+  .dayops-list {
+    gap: 0.8rem;
   }
 }
