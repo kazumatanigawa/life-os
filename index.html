@@ -125,7 +125,7 @@
                 <p class="section-kicker">Week Goal</p>
                 <h3>今週の目標</h3>
               </div>
-              <textarea id="week-goal" rows="6" placeholder="週次KPIに接続する目標"></textarea>
+              <textarea id="week-goal" rows="2" placeholder="今週のテーマ / 最優先KPIを短く書く"></textarea>
             </article>
 
             <article class="card morning-card">
@@ -169,105 +169,135 @@
         </section>
 
         <section class="screen hidden" id="day-ops-screen">
-          <div class="hero-card dayops-hero">
-            <div class="section-heading">
-              <p class="section-kicker">Task</p>
-              <h2>タスクを漏らさず整理する</h2>
-            </div>
-            <p class="support-text">発生した連絡、121日程調整、タスクをその場で拾い、今日やるか明日に回すかを必ず決める。</p>
-          </div>
-
           <div class="screen-grid">
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Morning Focus</p>
+                <h3>今日の最重要3つ</h3>
+              </div>
+              <div class="task-focus-list" id="task-focus-list"></div>
+              <div class="action-row compact-row">
+                <button class="ghost-button" data-screen="today" type="button">Morningで編集</button>
+              </div>
+            </article>
+
             <article class="card span-two">
               <div class="section-heading">
                 <p class="section-kicker">Carry Over</p>
                 <h3>前日からの引き継ぎ</h3>
               </div>
-              <div class="carryover-summary-list" id="carryover-summary-list"></div>
+              <div class="carryover-summary-card" id="carryover-summary-list"></div>
             </article>
 
-            <article class="card span-two">
-              <div class="section-heading">
-                <p class="section-kicker">Contact</p>
-                <h3>連絡</h3>
+            <article class="card span-two task-section" id="task-section-contact">
+              <button class="task-section-header" data-task-section-toggle="contact" type="button">
+                <div>
+                  <p class="section-kicker">Contact</p>
+                  <h3>連絡</h3>
+                </div>
+                <div class="task-section-summary" id="task-section-summary-contact"></div>
+                <span class="task-section-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="task-section-body" id="task-section-body-contact">
+                <div class="dayops-list" id="contact-list"></div>
+                <div class="action-row compact-row">
+                  <button class="secondary-button" data-task-form-toggle="contact" type="button">+ 追加する</button>
+                </div>
+                <div class="dayops-form-grid contact-form hidden" id="contact-form-panel">
+                  <label>
+                    <span>名前</span>
+                    <input id="contact-name" data-dayops-draft="contact:name" type="text" placeholder="相手の名前" />
+                  </label>
+                  <label>
+                    <span>ツール</span>
+                    <input
+                      id="contact-tool"
+                      data-dayops-draft="contact:tool"
+                      type="text"
+                      placeholder="LINE / FB / Instagram / 電話"
+                    />
+                  </label>
+                  <label class="span-two">
+                    <span>要件</span>
+                    <input id="contact-requirement" data-dayops-draft="contact:requirement" type="text" placeholder="何を送るか" />
+                  </label>
+                </div>
+                <div class="action-row compact-row hidden" id="contact-form-actions">
+                  <button class="secondary-button" data-dayops-add="contact" type="button">連絡を追加</button>
+                </div>
               </div>
-              <div class="dayops-form-grid contact-form">
-                <label>
-                  <span>名前</span>
-                  <input id="contact-name" data-dayops-draft="contact:name" type="text" placeholder="相手の名前" />
-                </label>
-                <label>
-                  <span>ツール</span>
-                  <input
-                    id="contact-tool"
-                    data-dayops-draft="contact:tool"
-                    type="text"
-                    placeholder="LINE / FB / Instagram / 電話"
-                  />
-                </label>
-                <label class="span-two">
-                  <span>要件</span>
-                  <input id="contact-requirement" data-dayops-draft="contact:requirement" type="text" placeholder="何を送るか" />
-                </label>
-              </div>
-              <div class="action-row">
-                <button class="secondary-button" data-dayops-add="contact" type="button">連絡を追加</button>
-              </div>
-              <div class="dayops-list" id="contact-list"></div>
             </article>
 
-            <article class="card span-two">
-              <div class="section-heading">
-                <p class="section-kicker">121</p>
-                <h3>121日程調整</h3>
+            <article class="card span-two task-section" id="task-section-schedule121">
+              <button class="task-section-header" data-task-section-toggle="schedule121" type="button">
+                <div>
+                  <p class="section-kicker">121</p>
+                  <h3>121日程調整</h3>
+                </div>
+                <div class="task-section-summary" id="task-section-summary-schedule121"></div>
+                <span class="task-section-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="task-section-body" id="task-section-body-schedule121">
+                <div class="dayops-list" id="schedule121-list"></div>
+                <div class="action-row compact-row">
+                  <button class="secondary-button" data-task-form-toggle="schedule121" type="button">+ 追加する</button>
+                </div>
+                <div class="dayops-form-grid schedule-form hidden" id="schedule121-form-panel">
+                  <label>
+                    <span>名前</span>
+                    <input id="schedule-name" data-dayops-draft="schedule121:name" type="text" placeholder="相手の名前" />
+                  </label>
+                  <label>
+                    <span>その人の仕事</span>
+                    <input id="schedule-job" data-dayops-draft="schedule121:job" type="text" placeholder="職業・肩書き" />
+                  </label>
+                  <label class="span-two">
+                    <span>連絡ツール</span>
+                    <input id="schedule-tool" data-dayops-draft="schedule121:tool" type="text" placeholder="LINE / FB / Instagram" />
+                  </label>
+                </div>
+                <div class="action-row compact-row hidden" id="schedule121-form-actions">
+                  <button class="secondary-button" data-dayops-add="schedule121" type="button">日程調整を追加</button>
+                </div>
               </div>
-              <div class="dayops-form-grid schedule-form">
-                <label>
-                  <span>名前</span>
-                  <input id="schedule-name" data-dayops-draft="schedule121:name" type="text" placeholder="相手の名前" />
-                </label>
-                <label>
-                  <span>その人の仕事</span>
-                  <input id="schedule-job" data-dayops-draft="schedule121:job" type="text" placeholder="職業・肩書き" />
-                </label>
-                <label class="span-two">
-                  <span>連絡ツール</span>
-                  <input id="schedule-tool" data-dayops-draft="schedule121:tool" type="text" placeholder="LINE / FB / Instagram" />
-                </label>
-              </div>
-              <div class="action-row">
-                <button class="secondary-button" data-dayops-add="schedule121" type="button">日程調整を追加</button>
-              </div>
-              <div class="dayops-list" id="schedule121-list"></div>
             </article>
 
-            <article class="card span-two">
-              <div class="section-heading">
-                <p class="section-kicker">Task</p>
-                <h3>作業タスク</h3>
+            <article class="card span-two task-section" id="task-section-task">
+              <button class="task-section-header" data-task-section-toggle="task" type="button">
+                <div>
+                  <p class="section-kicker">Task</p>
+                  <h3>作業タスク</h3>
+                </div>
+                <div class="task-section-summary" id="task-section-summary-task"></div>
+                <span class="task-section-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="task-section-body" id="task-section-body-task">
+                <div class="dayops-list" id="task-list"></div>
+                <div class="action-row compact-row">
+                  <button class="secondary-button" data-task-form-toggle="task" type="button">+ 追加する</button>
+                </div>
+                <div class="dayops-form-grid task-form hidden" id="task-form-panel">
+                  <label>
+                    <span>作業</span>
+                    <input id="task-title" data-dayops-draft="task:title" type="text" placeholder="やる作業" />
+                  </label>
+                  <label>
+                    <span>ゴール</span>
+                    <input id="task-goal" data-dayops-draft="task:goal" type="text" placeholder="完了条件" />
+                  </label>
+                  <label>
+                    <span>何分かかるか</span>
+                    <input id="task-estimated-minutes" data-dayops-draft="task:estimatedMinutes" type="number" min="1" inputmode="numeric" placeholder="15" />
+                  </label>
+                  <label>
+                    <span>いつやるか</span>
+                    <input id="task-when" data-dayops-draft="task:when" type="text" placeholder="14:30 / 営業後 / 移動中" />
+                  </label>
+                </div>
+                <div class="action-row compact-row hidden" id="task-form-actions">
+                  <button class="secondary-button" data-dayops-add="task" type="button">タスクを追加</button>
+                </div>
               </div>
-              <div class="dayops-form-grid task-form">
-                <label>
-                  <span>作業</span>
-                  <input id="task-title" data-dayops-draft="task:title" type="text" placeholder="やる作業" />
-                </label>
-                <label>
-                  <span>ゴール</span>
-                  <input id="task-goal" data-dayops-draft="task:goal" type="text" placeholder="完了条件" />
-                </label>
-                <label>
-                  <span>何分かかるか</span>
-                  <input id="task-estimated-minutes" data-dayops-draft="task:estimatedMinutes" type="number" min="1" inputmode="numeric" placeholder="15" />
-                </label>
-                <label>
-                  <span>いつやるか</span>
-                  <input id="task-when" data-dayops-draft="task:when" type="text" placeholder="14:30 / 営業後 / 移動中" />
-                </label>
-              </div>
-              <div class="action-row">
-                <button class="secondary-button" data-dayops-add="task" type="button">タスクを追加</button>
-              </div>
-              <div class="dayops-list" id="task-list"></div>
             </article>
 
             <article class="card span-two">
@@ -448,7 +478,7 @@
       </main>
 
       <nav class="app-nav hidden" id="app-nav">
-        <button class="nav-button active" data-screen="today" type="button">Today</button>
+        <button class="nav-button active" data-screen="today" type="button">Morning</button>
         <button class="nav-button" data-screen="dayOps" type="button">タスク</button>
         <button class="nav-button" data-screen="night" type="button">Night</button>
         <button class="nav-button" data-screen="logs" type="button">Logs</button>

@@ -28,6 +28,12 @@ const DAY_OPS_TYPE_CONFIG = {
   },
 };
 
+const DEFAULT_TASK_SECTION_OPEN_STATE = {
+  [DAY_OPS_TYPES.contact]: false,
+  [DAY_OPS_TYPES.schedule121]: false,
+  [DAY_OPS_TYPES.task]: true,
+};
+
 const MISSION_SECTIONS = [
   {
     key: "vision",
@@ -152,6 +158,15 @@ const state = {
       goal: "",
       estimatedMinutes: "",
       when: "",
+    },
+  },
+  ui: {
+    dayOpsDateKey: "",
+    taskSections: { ...DEFAULT_TASK_SECTION_OPEN_STATE },
+    taskForms: {
+      contact: false,
+      schedule121: false,
+      task: false,
     },
   },
 };
@@ -593,6 +608,7 @@ function initializeState() {
   state.dailyLogs = loadDailyLogs();
   state.currentDateKey = getDateKey();
   ensureCurrentLog();
+  ensureTaskUiState();
   state.selectedLogDate = state.currentDateKey;
   hydrateTimerFromLog();
   state.bootUnlocked = !shouldShowBootOnLaunch();
@@ -620,6 +636,42 @@ function countUnresolvedDayOps(log = getCurrentLog()) {
 
 function canEnterNight() {
   return !hasUnresolvedDayOps();
+}
+
+function buildDefaultTaskSectionState(log = getCurrentLog()) {
+  return Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
+    const items = getDayOpsBucketByType(log, type);
+    accumulator[type] = items.some((item) => item.status === "open") || DEFAULT_TASK_SECTION_OPEN_STATE[type];
+    return accumulator;
+  }, {});
+}
+
+function ensureTaskUiState(log = getCurrentLog()) {
+  if (state.ui.dayOpsDateKey === log.date) {
+    return;
+  }
+  state.ui.dayOpsDateKey = log.date;
+  state.ui.taskSections = buildDefaultTaskSectionState(log);
+  state.ui.taskForms = {
+    contact: false,
+    schedule121: false,
+    task: false,
+  };
+}
+
+function toggleTaskSection(type) {
+  ensureTaskUiState();
+  state.ui.taskSections[type] = !state.ui.taskSections[type];
+  renderDayOps();
+}
+
+function toggleTaskForm(type) {
+  ensureTaskUiState();
+  state.ui.taskForms[type] = !state.ui.taskForms[type];
+  if (state.ui.taskForms[type]) {
+    state.ui.taskSections[type] = true;
+  }
+  renderDayOps();
 }
 
 function showScreen(screen) {
@@ -871,7 +923,7 @@ function renderSaveFabVisibility() {
 
 function renderToday() {
   const log = getCurrentLog();
-  document.getElementById("today-title").textContent = `${formatDateLabel(state.currentDateKey)} の設計`;
+  document.getElementById("today-title").textContent = `${formatDateLabel(state.currentDateKey)} Morning`;
   document.getElementById("week-goal").value = log.weekGoal;
   document.getElementById("mit1").value = log.mit.mit1;
   document.getElementById("mit2").value = log.mit.mit2;
@@ -902,16 +954,57 @@ function renderCarryOverSummary() {
     },
   ];
 
-  container.innerHTML = summaries
+  const total = summaries.reduce((sum, item) => sum + item.count, 0);
+  container.innerHTML = `
+    <div class="carryover-summary-head">
+      <strong>${total ? `${total}件の引き継ぎあり` : "引き継ぎなし"}</strong>
+      <span>前日から持ち越した項目だけを集計</span>
+    </div>
+    <div class="carryover-summary-chips">
+      ${summaries
+        .map((item) => `<span class="meta-chip">${escapeHtml(item.label)} ${item.count}件</span>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function renderTaskFocusList() {
+  const log = getCurrentLog();
+  const container = document.getElementById("task-focus-list");
+  const mitEntries = [log.mit.mit1, log.mit.mit2, log.mit.mit3];
+  container.innerHTML = mitEntries
     .map(
-      (item) => `
-        <div class="carryover-summary-item">
-          <strong>${escapeHtml(item.label)}</strong>
-          <span>${item.count ? `${item.count}件を引き継ぎ` : "引き継ぎなし"}</span>
+      (entry, index) => `
+        <div class="task-focus-item">
+          <span class="task-focus-index">${index + 1}</span>
+          <p>${escapeHtml(entry || "未設定")}</p>
         </div>
       `
     )
     .join("");
+}
+
+function renderTaskSection(type, items) {
+  const article = document.getElementById(`task-section-${type}`);
+  const body = document.getElementById(`task-section-body-${type}`);
+  const summary = document.getElementById(`task-section-summary-${type}`);
+  const formPanel = document.getElementById(`${type}-form-panel`);
+  const formActions = document.getElementById(`${type}-form-actions`);
+  const toggleButton = article.querySelector(`[data-task-form-toggle="${type}"]`);
+  const unresolvedCount = items.filter((item) => item.status === "open").length;
+  const parts = [`${items.length}件`];
+  if (unresolvedCount) {
+    parts.push(`未整理${unresolvedCount}`);
+  }
+
+  const sectionOpen = Boolean(state.ui.taskSections[type]);
+  const formOpen = Boolean(state.ui.taskForms[type]);
+  article.classList.toggle("is-open", sectionOpen);
+  body.classList.toggle("hidden", !sectionOpen);
+  formPanel.classList.toggle("hidden", !formOpen);
+  formActions.classList.toggle("hidden", !formOpen);
+  toggleButton.textContent = formOpen ? "入力を閉じる" : "+ 追加する";
+  summary.innerHTML = parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
 }
 
 function getDayOpsStatusLabel(status) {
@@ -993,6 +1086,7 @@ function renderDayOpsList(containerId, items, type) {
 
 function renderDayOps() {
   const log = getCurrentLog();
+  ensureTaskUiState(log);
   document.getElementById("contact-name").value = state.dayOpsDrafts.contact.name;
   document.getElementById("contact-tool").value = state.dayOpsDrafts.contact.tool;
   document.getElementById("contact-requirement").value = state.dayOpsDrafts.contact.requirement;
@@ -1005,10 +1099,14 @@ function renderDayOps() {
   document.getElementById("task-when").value = state.dayOpsDrafts.task.when;
   document.getElementById("expense-memo").value = log.dayOps.expenseMemo;
 
+  renderTaskFocusList();
   renderCarryOverSummary();
   renderDayOpsList("contact-list", log.dayOps.contacts, DAY_OPS_TYPES.contact);
   renderDayOpsList("schedule121-list", log.dayOps.schedule121, DAY_OPS_TYPES.schedule121);
   renderDayOpsList("task-list", log.dayOps.tasks, DAY_OPS_TYPES.task);
+  renderTaskSection(DAY_OPS_TYPES.contact, log.dayOps.contacts);
+  renderTaskSection(DAY_OPS_TYPES.schedule121, log.dayOps.schedule121);
+  renderTaskSection(DAY_OPS_TYPES.task, log.dayOps.tasks);
 
   const unresolved = countUnresolvedDayOps(log);
   document.getElementById("dayops-status-note").textContent = unresolved ? `未整理 ${unresolved} 件` : "未整理 0 件";
@@ -1503,6 +1601,8 @@ function addDayOpsItem(type) {
     state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
   }
 
+  state.ui.taskSections[type] = true;
+  state.ui.taskForms[type] = false;
   persistDailyLogs(true);
   renderDayOps();
 }
@@ -1538,7 +1638,7 @@ function deleteDayOpsItem(type, id) {
 }
 
 function handleClick(event) {
-  const target = event.target;
+  const target = event.target.closest("button, [data-log-date]") || event.target;
 
   if (target.id === "mission-next-button") {
     persistDailyLogs(true);
@@ -1626,6 +1726,16 @@ function handleClick(event) {
   if (target.dataset.openRoutine) {
     const [type, key] = target.dataset.openRoutine.split(":");
     openRoutineLink(type, key);
+    return;
+  }
+
+  if (target.dataset.taskSectionToggle) {
+    toggleTaskSection(target.dataset.taskSectionToggle);
+    return;
+  }
+
+  if (target.dataset.taskFormToggle) {
+    toggleTaskForm(target.dataset.taskFormToggle);
     return;
   }
 
