@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LIFE OS</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Wake the vision. Run the day.</p>
+          <h1>LIFE OS</h1>
+        </div>
+        <div class="header-meta">
+          <div class="date-pill" id="current-date-display"></div>
+          <button class="ghost-button" id="quick-save-button" type="button">保存</button>
+        </div>
+      </header>
+
+      <div class="floating-progress hidden" id="floating-progress">
+        <div class="floating-progress-copy">
+          <span>今日の進捗</span>
+          <strong id="floating-progress-text">0%</strong>
+        </div>
+        <div class="progress-bar compact">
+          <div class="progress-fill" id="floating-progress-fill"></div>
+        </div>
+      </div>
+
+      <main class="main-content">
+        <section class="screen boot-screen" id="boot-screen">
+          <div class="boot-hero">
+            <p class="eyebrow">Boot Sequence</p>
+            <h2>理想像に戻ってから、今日を起動する。</h2>
+          </div>
+
+          <div class="boot-panel" id="mission-view">
+            <div class="section-heading">
+              <p class="section-kicker">Step 1</p>
+              <h3>Mission Statement Boot</h3>
+            </div>
+
+            <div class="mission-cards" id="mission-cards"></div>
+
+            <div class="card check-card ritual-card">
+              <label class="toggle-card">
+                <input type="checkbox" id="mission-readaloud" />
+                <span class="toggle-indicator"></span>
+                <span class="toggle-copy">すべて声に出して読んだ</span>
+              </label>
+              <label class="toggle-card">
+                <input type="checkbox" id="mission-principles" />
+                <span class="toggle-indicator"></span>
+                <span class="toggle-copy">今日もこの原則で生きる</span>
+              </label>
+              <div class="action-row">
+                <button class="primary-button" id="mission-next-button" type="button">10mタイムマシンへ進む</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="boot-panel hidden" id="time-machine-view">
+            <div class="card timer-card">
+              <div class="timer-face" id="timer-display">10:00</div>
+              <button class="primary-button" id="timer-start-button" type="button">タイマー開始</button>
+            </div>
+
+            <div class="card-grid" id="time-machine-fields"></div>
+
+            <div class="card check-card ritual-card">
+              <label class="toggle-card">
+                <input type="checkbox" id="tm-visualized" />
+                <span class="toggle-indicator"></span>
+                <span class="toggle-copy">3年後の未来を具体的に想像した</span>
+              </label>
+              <label class="toggle-card">
+                <input type="checkbox" id="tm-action-visible" />
+                <span class="toggle-indicator"></span>
+                <span class="toggle-copy">今日やるべき一手が見えた</span>
+              </label>
+              <div class="action-row">
+                <button class="primary-button" id="time-machine-complete-button" type="button">今日を始める</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen hidden" id="today-screen">
+          <div class="hero-card morning-hero">
+            <div class="section-heading">
+              <p class="section-kicker">Morning Board</p>
+              <h2 id="today-title">今日の設計</h2>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-copy">
+                <span>今日の進捗</span>
+                <strong id="progress-text">0%</strong>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen-grid">
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Handoff</p>
+                <h3>昨日からの申し送り</h3>
+              </div>
+              <div id="handoff-content" class="handoff-list"></div>
+            </article>
+
+            <article class="card morning-card">
+              <div class="section-heading">
+                <p class="section-kicker">Week Goal</p>
+                <h3>今週の目標</h3>
+              </div>
+              <textarea id="week-goal" rows="6" placeholder="週次KPIに接続する目標"></textarea>
+            </article>
+
+            <article class="card morning-card">
+              <div class="section-heading">
+                <p class="section-kicker">Morning Routine</p>
+                <h3>朝ルーティン</h3>
+              </div>
+              <div id="morning-routine-list" class="routine-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Top 3</p>
+                <h3>今日の最重要3つ</h3>
+              </div>
+              <div class="candidate-box">
+                <p class="candidate-label">未来からの今日の一手</p>
+                <p id="mit-candidate-text" class="candidate-text">未入力</p>
+                <button class="secondary-button" id="apply-mit-candidate-button" type="button">最重要1に反映する</button>
+              </div>
+              <div class="stack-fields triple-fields">
+                <label>
+                  <span>最重要1</span>
+                  <input id="mit1" type="text" placeholder="今日最重要の一手" />
+                </label>
+                <label>
+                  <span>最重要2</span>
+                  <input id="mit2" type="text" placeholder="重要タスク 2" />
+                </label>
+                <label>
+                  <span>最重要3</span>
+                  <input id="mit3" type="text" placeholder="重要タスク 3" />
+                </label>
+              </div>
+            </article>
+          </div>
+
+          <div class="toolbar">
+            <button class="primary-button" data-screen="night" type="button">夜ルーティンへ進む</button>
+            <button class="ghost-button" id="dashboard-save-button" type="button">保存する</button>
+          </div>
+        </section>
+
+        <section class="screen hidden" id="night-screen">
+          <div class="hero-card night-hero">
+            <div class="section-heading">
+              <p class="section-kicker">Night Board</p>
+              <h2>夜の振り返り</h2>
+            </div>
+            <p class="support-text">今日を締めて、明日に渡す。</p>
+          </div>
+
+          <div class="screen-grid">
+            <article class="card night-card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Night Routine</p>
+                <h3>夜ルーティン</h3>
+              </div>
+              <div id="night-routine-list" class="routine-list"></div>
+            </article>
+
+            <article class="card night-card">
+              <div class="section-heading">
+                <p class="section-kicker">Reflection</p>
+                <h3>今日のFB / 学び</h3>
+              </div>
+              <textarea id="fb-learning" rows="6" placeholder="今日一番ROIが高かった行動は何か？&#10;一番の学びは何か？"></textarea>
+            </article>
+
+            <article class="card night-card">
+              <div class="section-heading">
+                <p class="section-kicker">Next</p>
+                <h3>明日のNEXT ACTION</h3>
+              </div>
+              <textarea id="next-action" rows="5" placeholder="明日最初に着手すること"></textarea>
+            </article>
+
+            <article class="card night-card">
+              <div class="section-heading">
+                <p class="section-kicker">Good &amp; New</p>
+                <h3>Good &amp; New</h3>
+              </div>
+              <textarea id="good-and-new" rows="5" placeholder="今日の良かったこと、新しく起きたこと"></textarea>
+            </article>
+
+            <article class="card night-card">
+              <div class="section-heading">
+                <p class="section-kicker">Gratitude</p>
+                <h3>今日の承認・感謝</h3>
+              </div>
+              <div class="stack-fields">
+                <label>
+                  <span>誰に</span>
+                  <input id="gratitude-person" type="text" placeholder="感謝した相手" />
+                </label>
+                <label>
+                  <span>何を感謝したか</span>
+                  <input id="gratitude-what" type="text" placeholder="感謝したこと" />
+                </label>
+                <label>
+                  <span>その人に今週何をするか</span>
+                  <input id="gratitude-weekly-action" type="text" placeholder="今週返すアクション" />
+                </label>
+              </div>
+            </article>
+
+            <article class="card night-card">
+              <div class="section-heading">
+                <p class="section-kicker">Reminders</p>
+                <h3>明日のリマインド</h3>
+              </div>
+              <div class="reminder-input-row">
+                <input id="new-reminder-input" type="text" placeholder="新しいリマインドを追加" />
+                <button class="secondary-button" id="add-reminder-button" type="button">追加</button>
+              </div>
+              <div id="reminder-list" class="reminder-list"></div>
+            </article>
+
+            <article class="card night-card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Memo</p>
+                <h3>メモ</h3>
+              </div>
+              <textarea id="memo" rows="7" placeholder="自由メモ"></textarea>
+            </article>
+          </div>
+
+          <div class="toolbar">
+            <button class="primary-button" id="markdown-export-button" type="button">Markdown出力</button>
+            <button class="secondary-button" id="json-export-button" type="button">JSON出力</button>
+            <button class="ghost-button" id="night-save-button" type="button">保存する</button>
+          </div>
+        </section>
+
+        <section class="screen hidden" id="logs-screen">
+          <div class="section-heading">
+            <p class="section-kicker">Logs</p>
+            <h2>過去ログ</h2>
+          </div>
+          <div class="screen-grid">
+            <article class="card">
+              <h3>日付一覧</h3>
+              <div id="logs-list" class="logs-list"></div>
+            </article>
+            <article class="card span-two">
+              <div class="log-detail-header">
+                <h3 id="logs-detail-title">ログ詳細</h3>
+                <div class="toolbar compact">
+                  <button class="secondary-button" id="logs-markdown-button" type="button">Markdown出力</button>
+                  <button class="secondary-button" id="logs-json-button" type="button">JSON出力</button>
+                </div>
+              </div>
+              <div id="logs-detail-content" class="log-detail"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="screen hidden" id="settings-screen">
+          <div class="section-heading">
+            <p class="section-kicker">Settings</p>
+            <h2>設定</h2>
+          </div>
+          <div class="screen-grid">
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Mission Statement</p>
+                <h3>本文編集</h3>
+              </div>
+              <div id="settings-mission-fields" class="settings-fields"></div>
+            </article>
+
+            <article class="card">
+              <div class="section-heading">
+                <p class="section-kicker">Boot Sequence</p>
+                <h3>表示設定</h3>
+              </div>
+              <div id="settings-boot-fields" class="checklist"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Links</p>
+                <h3>外部リンク</h3>
+              </div>
+              <div id="settings-link-fields" class="settings-fields"></div>
+              <p class="inline-note">
+                店舗状況確認のパスワードは保存しません。URLのみ保持し、認証情報は外部のパスワード管理アプリで管理してください。
+              </p>
+            </article>
+          </div>
+          <div class="toolbar">
+            <button class="primary-button" id="settings-save-button" type="button">設定を保存する</button>
+          </div>
+        </section>
+
+        <section class="output-panel hidden" id="output-panel">
+          <div class="log-detail-header">
+            <div>
+              <p class="section-kicker" id="output-kicker">Export</p>
+              <h3 id="output-title">出力</h3>
+            </div>
+            <div class="toolbar compact">
+              <button class="secondary-button" id="copy-output-button" type="button">コピー</button>
+              <button class="ghost-button" id="close-output-button" type="button">閉じる</button>
+            </div>
+          </div>
+          <textarea id="output-content" rows="18" readonly></textarea>
+        </section>
+      </main>
+
+      <nav class="app-nav hidden" id="app-nav">
+        <button class="nav-button active" data-screen="today" type="button">Today</button>
+        <button class="nav-button" data-screen="night" type="button">Night</button>
+        <button class="nav-button" data-screen="logs" type="button">Logs</button>
+        <button class="nav-button" data-screen="settings" type="button">Settings</button>
+      </nav>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
