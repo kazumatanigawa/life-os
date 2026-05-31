@@ -20,7 +20,7 @@ const DAY_OPS_TYPE_CONFIG = {
   },
   [DAY_OPS_TYPES.schedule121]: {
     bucket: "schedule121",
-    label: "121日程調整",
+    label: "日程調整",
   },
   [DAY_OPS_TYPES.task]: {
     bucket: "tasks",
@@ -168,6 +168,8 @@ const state = {
       schedule121: false,
       task: false,
     },
+    editingDayOpsType: null,
+    editingDayOpsItemId: null,
   },
 };
 
@@ -362,6 +364,10 @@ function hydrateDailyLog(dateKey, savedLog) {
   return merged;
 }
 
+function syncPrimaryMit(log = getCurrentLog()) {
+  log.mit.mit1 = log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture || "";
+}
+
 function getDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -469,7 +475,7 @@ function getCarryOverReminderText(item) {
     return `連絡: ${item.name} / ${item.tool || "ツール未設定"} / ${item.requirement || "要件未設定"}`;
   }
   if (item.type === DAY_OPS_TYPES.schedule121) {
-    return `121日程調整: ${item.name} / ${item.job || "仕事未設定"} / ${item.tool || "連絡手段未設定"}`;
+    return `日程調整: ${item.name} / ${item.job || "仕事未設定"} / ${item.tool || "連絡手段未設定"}`;
   }
   return `タスク: ${item.title} / ${item.estimatedMinutes || "時間未設定"}分 / ${item.when || "未設定"}`;
 }
@@ -564,6 +570,7 @@ function ensureCurrentLog() {
   }
   state.dailyLogs[state.currentDateKey] = hydrateDailyLog(state.currentDateKey, state.dailyLogs[state.currentDateKey]);
   inheritCarryOverItems();
+  syncPrimaryMit(getCurrentLog());
   persistDailyLogs(false);
 }
 
@@ -657,6 +664,8 @@ function ensureTaskUiState(log = getCurrentLog()) {
     schedule121: false,
     task: false,
   };
+  state.ui.editingDayOpsType = null;
+  state.ui.editingDayOpsItemId = null;
 }
 
 function toggleTaskSection(type) {
@@ -671,6 +680,39 @@ function toggleTaskForm(type) {
   if (state.ui.taskForms[type]) {
     state.ui.taskSections[type] = true;
   }
+  if (type !== DAY_OPS_TYPES.task || !state.ui.taskForms[type]) {
+    state.ui.editingDayOpsType = null;
+    state.ui.editingDayOpsItemId = null;
+  }
+  renderDayOps();
+}
+
+function resetTaskEditState(clearDraft = true) {
+  state.ui.editingDayOpsType = null;
+  state.ui.editingDayOpsItemId = null;
+  if (clearDraft) {
+    state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
+  }
+}
+
+function startDayOpsEdit(type, id) {
+  if (type !== DAY_OPS_TYPES.task) {
+    return;
+  }
+  const item = getCurrentLog().dayOps.tasks.find((entry) => entry.id === id);
+  if (!item) {
+    return;
+  }
+  state.dayOpsDrafts.task = {
+    title: item.title || "",
+    goal: item.goal || "",
+    estimatedMinutes: item.estimatedMinutes || "",
+    when: item.when || "",
+  };
+  state.ui.editingDayOpsType = type;
+  state.ui.editingDayOpsItemId = id;
+  state.ui.taskSections.task = true;
+  state.ui.taskForms.task = true;
   renderDayOps();
 }
 
@@ -782,11 +824,17 @@ function renderBootState() {
   renderFloatingTimerVisibility();
 }
 
-function renderRoutineList(containerId, items, values, type) {
+function renderRoutineList(containerId, items, values, type, options = {}) {
+  const collapseCompleted = Boolean(options.collapseCompleted);
   const container = document.getElementById(containerId);
-  container.innerHTML = items
+  const orderedItems = collapseCompleted
+    ? [...items].sort((left, right) => Number(Boolean(values[left.key])) - Number(Boolean(values[right.key])))
+    : items;
+
+  container.innerHTML = orderedItems
     .map((item) => {
       const checked = Boolean(values[item.key]);
+      const collapsed = collapseCompleted && checked;
       const openButton = item.linkKey
         ? `<button class="routine-name link-button" type="button" data-open-routine="${type}:${item.key}">${escapeHtml(
             item.label
@@ -795,7 +843,7 @@ function renderRoutineList(containerId, items, values, type) {
       const hint = item.textOnly ? "Obsidian内リンク扱い" : escapeHtml(item.hint || "チェックのみ");
 
       return `
-        <div class="routine-tile ${checked ? "is-checked" : ""}">
+        <div class="routine-tile ${checked ? "is-checked" : ""} ${collapsed ? "is-collapsed" : ""}">
           <div class="routine-main">
             <label class="routine-check">
               <input type="checkbox" data-routine-type="${type}" data-routine-key="${item.key}" ${checked ? "checked" : ""} />
@@ -803,7 +851,7 @@ function renderRoutineList(containerId, items, values, type) {
             </label>
             <span class="routine-copy">
               ${openButton}
-              <span class="routine-hint">${hint}</span>
+              ${collapsed ? '<span class="routine-state">完了</span>' : `<span class="routine-hint">${hint}</span>`}
             </span>
           </div>
         </div>
@@ -812,10 +860,15 @@ function renderRoutineList(containerId, items, values, type) {
     .join("");
 }
 
-function renderHandoff() {
-  const handoff = document.getElementById("handoff-content");
+function renderTaskHandoffCard() {
+  const handoff = document.getElementById("task-handoff-card");
+  const log = getCurrentLog();
   const yesterdayLog = getYesterdayLog();
-  const currentAction = getCurrentLog().bootSequence.timeMachine10m.futureVision.todayActionFromFuture;
+  const carryOverGroups = getDayOpsCollections(log).map(({ type, items }) => ({
+    label: DAY_OPS_TYPE_CONFIG[type].label,
+    items: items.filter((item) => Boolean(item.carriedOverFrom)),
+  }));
+  const totalCarryOver = carryOverGroups.reduce((sum, entry) => sum + entry.items.length, 0);
   const items = [
     {
       label: "今日のアクション",
@@ -825,22 +878,48 @@ function renderHandoff() {
       label: "昨日のリマインド",
       value: yesterdayLog ? yesterdayLog.tomorrowReminder.map((item) => item.text).filter(Boolean).join(" / ") : "",
     },
-    {
-      label: "未来から逆算した今日の一手",
-      value: currentAction,
-    },
   ];
 
-  handoff.innerHTML = items
+  handoff.innerHTML = `
+    ${items
     .map(
       (item) => `
-        <div class="handoff-item">
+        <div class="task-handoff-block">
           <strong>${escapeHtml(item.label)}</strong>
           <p>${escapeHtml(item.value || "データなし")}</p>
         </div>
       `
     )
-    .join("");
+    .join("")}
+    <div class="task-handoff-block">
+      <strong>持ち越しタスク</strong>
+      <p>${totalCarryOver ? `${totalCarryOver}件を引き継ぎ` : "持ち越しなし"}</p>
+      <div class="task-handoff-chips">
+        ${carryOverGroups
+          .map(
+            (entry) => `
+              <span class="meta-chip ${entry.items.length ? "has-items" : ""}">
+                ${escapeHtml(entry.label)} ${entry.items.length}件
+              </span>
+            `
+          )
+          .join("")}
+      </div>
+      ${
+        totalCarryOver
+          ? `<div class="task-handoff-list">
+              ${carryOverGroups
+                .flatMap((entry) =>
+                  entry.items.map(
+                    (item) => `<p>${escapeHtml(entry.label)}: ${escapeHtml(buildDayOpsTitle(item))}</p>`
+                  )
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+    </div>
+  `;
 }
 
 function renderReminders() {
@@ -923,49 +1002,16 @@ function renderSaveFabVisibility() {
 
 function renderToday() {
   const log = getCurrentLog();
+  syncPrimaryMit(log);
   document.getElementById("today-title").textContent = `${formatDateLabel(state.currentDateKey)} Morning`;
   document.getElementById("week-goal").value = log.weekGoal;
   document.getElementById("mit1").value = log.mit.mit1;
   document.getElementById("mit2").value = log.mit.mit2;
   document.getElementById("mit3").value = log.mit.mit3;
-  document.getElementById("mit-candidate-text").textContent =
-    log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture || "未入力";
-
-  renderHandoff();
-  renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning");
+  renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
+    collapseCompleted: true,
+  });
   updateProgressUi();
-}
-
-function renderCarryOverSummary() {
-  const container = document.getElementById("carryover-summary-list");
-  const log = getCurrentLog();
-  const summaries = [
-    {
-      label: "連絡",
-      count: log.dayOps.contacts.filter((item) => Boolean(item.carriedOverFrom)).length,
-    },
-    {
-      label: "121日程調整",
-      count: log.dayOps.schedule121.filter((item) => Boolean(item.carriedOverFrom)).length,
-    },
-    {
-      label: "タスク",
-      count: log.dayOps.tasks.filter((item) => Boolean(item.carriedOverFrom)).length,
-    },
-  ];
-
-  const total = summaries.reduce((sum, item) => sum + item.count, 0);
-  container.innerHTML = `
-    <div class="carryover-summary-head">
-      <strong>${total ? `${total}件の引き継ぎあり` : "引き継ぎなし"}</strong>
-      <span>前日から持ち越した項目だけを集計</span>
-    </div>
-    <div class="carryover-summary-chips">
-      ${summaries
-        .map((item) => `<span class="meta-chip">${escapeHtml(item.label)} ${item.count}件</span>`)
-        .join("")}
-    </div>
-  `;
 }
 
 function renderTaskFocusList() {
@@ -992,19 +1038,21 @@ function renderTaskSection(type, items) {
   const formActions = document.getElementById(`${type}-form-actions`);
   const toggleButton = article.querySelector(`[data-task-form-toggle="${type}"]`);
   const unresolvedCount = items.filter((item) => item.status === "open").length;
-  const parts = [`${items.length}件`];
-  if (unresolvedCount) {
-    parts.push(`未整理${unresolvedCount}`);
-  }
-
   const sectionOpen = Boolean(state.ui.taskSections[type]);
   const formOpen = Boolean(state.ui.taskForms[type]);
+  article.classList.toggle("has-items", items.length > 0);
+  article.classList.toggle("has-unresolved", unresolvedCount > 0);
   article.classList.toggle("is-open", sectionOpen);
   body.classList.toggle("hidden", !sectionOpen);
   formPanel.classList.toggle("hidden", !formOpen);
   formActions.classList.toggle("hidden", !formOpen);
-  toggleButton.textContent = formOpen ? "入力を閉じる" : "+ 追加する";
-  summary.innerHTML = parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
+  if (toggleButton) {
+    toggleButton.textContent = formOpen ? "入力を閉じる" : "+ 追加する";
+  }
+  summary.innerHTML = `
+    <span class="task-summary-pill ${items.length ? "has-items" : ""}">${items.length}件</span>
+    ${unresolvedCount ? `<span class="task-summary-pill is-alert">未整理${unresolvedCount}</span>` : ""}
+  `;
 }
 
 function getDayOpsStatusLabel(status) {
@@ -1061,8 +1109,11 @@ function renderDayOpsList(containerId, items, type) {
     .map((item) => {
       const meta = buildDayOpsMeta(item);
       const isOpen = item.status === "open";
+      const isDone = item.status === "done";
+      const isCarryOver = item.status === "carryOver";
+      const isEditing = state.ui.editingDayOpsItemId === item.id && state.ui.editingDayOpsType === type;
       return `
-        <article class="dayops-item">
+        <article class="dayops-item status-${item.status}">
           <div class="dayops-item-header">
             <div class="dayops-item-content">
               <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
@@ -1073,10 +1124,15 @@ function renderDayOpsList(containerId, items, type) {
             </div>
           </div>
           <div class="dayops-actions">
-            <button class="subtle-button" data-dayops-status="${type}:${item.id}:done" data-status-action="done" type="button">完了</button>
-            <button class="subtle-button" data-dayops-status="${type}:${item.id}:carryOver" data-status-action="carryOver" type="button">明日に回す</button>
-            <button class="subtle-button" data-dayops-status="${type}:${item.id}:reset" data-status-action="reset" type="button" ${isOpen ? "disabled" : ""}>戻す</button>
-            <button class="ghost-button" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
+            <button class="subtle-button ${isDone ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:done" data-status-action="done" type="button">完了</button>
+            <button class="subtle-button ${isCarryOver ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:carryOver" data-status-action="carryOver" type="button">明日に回す</button>
+            <button class="subtle-button ${isOpen ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:reset" data-status-action="reset" type="button" ${isOpen ? "disabled" : ""}>戻す</button>
+            ${
+              type === DAY_OPS_TYPES.task
+                ? `<button class="ghost-button ${isEditing ? "is-active" : ""}" data-dayops-edit="${type}:${item.id}" type="button">編集</button>`
+                : ""
+            }
+            <button class="ghost-button danger-button" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
           </div>
         </article>
       `;
@@ -1087,6 +1143,7 @@ function renderDayOpsList(containerId, items, type) {
 function renderDayOps() {
   const log = getCurrentLog();
   ensureTaskUiState(log);
+  syncPrimaryMit(log);
   document.getElementById("contact-name").value = state.dayOpsDrafts.contact.name;
   document.getElementById("contact-tool").value = state.dayOpsDrafts.contact.tool;
   document.getElementById("contact-requirement").value = state.dayOpsDrafts.contact.requirement;
@@ -1098,9 +1155,11 @@ function renderDayOps() {
   document.getElementById("task-estimated-minutes").value = state.dayOpsDrafts.task.estimatedMinutes;
   document.getElementById("task-when").value = state.dayOpsDrafts.task.when;
   document.getElementById("expense-memo").value = log.dayOps.expenseMemo;
+  document.getElementById("task-form-submit-button").textContent = state.ui.editingDayOpsItemId ? "保存する" : "タスクを追加";
+  document.querySelector("[data-task-edit-cancel]").classList.toggle("hidden", !state.ui.editingDayOpsItemId);
 
   renderTaskFocusList();
-  renderCarryOverSummary();
+  renderTaskHandoffCard();
   renderDayOpsList("contact-list", log.dayOps.contacts, DAY_OPS_TYPES.contact);
   renderDayOpsList("schedule121-list", log.dayOps.schedule121, DAY_OPS_TYPES.schedule121);
   renderDayOpsList("task-list", log.dayOps.tasks, DAY_OPS_TYPES.task);
@@ -1110,6 +1169,7 @@ function renderDayOps() {
 
   const unresolved = countUnresolvedDayOps(log);
   document.getElementById("dayops-status-note").textContent = unresolved ? `未整理 ${unresolved} 件` : "未整理 0 件";
+  document.getElementById("dayops-status-note").classList.toggle("is-alert", unresolved > 0);
   document.getElementById("dayops-next-button").disabled = unresolved > 0;
   updateProgressUi();
 }
@@ -1175,7 +1235,7 @@ function renderLogs() {
     <div class="log-detail-block">
       <strong>タスク</strong>
       <p>連絡: ${escapeHtml(formatDayOpsPreview(log.dayOps.contacts))}</p>
-      <p>121日程調整: ${escapeHtml(formatDayOpsPreview(log.dayOps.schedule121))}</p>
+      <p>日程調整: ${escapeHtml(formatDayOpsPreview(log.dayOps.schedule121))}</p>
       <p>タスク: ${escapeHtml(formatDayOpsPreview(log.dayOps.tasks))}</p>
       <p>支出メモ: ${escapeHtml(log.dayOps.expenseMemo || "未入力")}</p>
     </div>
@@ -1327,7 +1387,7 @@ function buildMarkdown(log) {
     "## タスク / 連絡",
     ...formatMarkdownDayOps(log.dayOps.contacts, (item) => `${item.name} / ${item.tool} / ${item.requirement}`),
     "",
-    "## タスク / 121日程調整",
+    "## タスク / 日程調整",
     ...formatMarkdownDayOps(log.dayOps.schedule121, (item) => `${item.name} / ${item.job} / ${item.tool}`),
     "",
     "## タスク / 作業タスク",
@@ -1469,9 +1529,6 @@ function updateCurrentLogField(id, value) {
     case "week-goal":
       log.weekGoal = value;
       break;
-    case "mit1":
-      log.mit.mit1 = value;
-      break;
     case "mit2":
       log.mit.mit2 = value;
       break;
@@ -1532,7 +1589,9 @@ function openRoutineLink(type, key) {
   bucket[key] = true;
   persistDailyLogs(false);
   if (type === "morning") {
-    renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning");
+    renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
+      collapseCompleted: true,
+    });
   } else {
     renderRoutineList("night-routine-list", NIGHT_ROUTINE_ITEMS, log.nightRoutine, "night");
   }
@@ -1587,18 +1646,28 @@ function addDayOpsItem(type) {
     if (!draft.title.trim()) {
       return;
     }
-    log.dayOps.tasks.push(
-      createDefaultDayOpsItem(type, {
-        title: draft.title.trim(),
-        goal: draft.goal.trim(),
-        estimatedMinutes: draft.estimatedMinutes ? String(draft.estimatedMinutes).trim() : "",
-        when: draft.when.trim(),
-        sourceDate: log.date,
-        createdAt: now,
-        updatedAt: now,
-      })
-    );
-    state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
+    const nextTaskValues = {
+      title: draft.title.trim(),
+      goal: draft.goal.trim(),
+      estimatedMinutes: draft.estimatedMinutes ? String(draft.estimatedMinutes).trim() : "",
+      when: draft.when.trim(),
+      sourceDate: log.date,
+      updatedAt: now,
+    };
+    if (state.ui.editingDayOpsType === type && state.ui.editingDayOpsItemId) {
+      const editingTask = log.dayOps.tasks.find((item) => item.id === state.ui.editingDayOpsItemId);
+      if (editingTask) {
+        Object.assign(editingTask, nextTaskValues);
+      }
+    } else {
+      log.dayOps.tasks.push(
+        createDefaultDayOpsItem(type, {
+          ...nextTaskValues,
+          createdAt: now,
+        })
+      );
+    }
+    resetTaskEditState(true);
   }
 
   state.ui.taskSections[type] = true;
@@ -1632,6 +1701,9 @@ function updateDayOpsStatus(type, id, status) {
 function deleteDayOpsItem(type, id) {
   const bucketName = DAY_OPS_TYPE_CONFIG[type].bucket;
   getCurrentLog().dayOps[bucketName] = getCurrentLog().dayOps[bucketName].filter((item) => item.id !== id);
+  if (state.ui.editingDayOpsType === type && state.ui.editingDayOpsItemId === id) {
+    resetTaskEditState(true);
+  }
   persistDailyLogs(true);
   renderDayOps();
   renderNight();
@@ -1662,17 +1734,6 @@ function handleClick(event) {
 
   if (target.id === "timer-start-button") {
     startTimer();
-    return;
-  }
-
-  if (target.id === "apply-mit-candidate-button") {
-    const action = getCurrentLog().bootSequence.timeMachine10m.futureVision.todayActionFromFuture;
-    if (action) {
-      getCurrentLog().mit.mit1 = action;
-      document.getElementById("mit1").value = action;
-      persistDailyLogs(true);
-      updateProgressUi();
-    }
     return;
   }
 
@@ -1739,8 +1800,21 @@ function handleClick(event) {
     return;
   }
 
+  if (target.dataset.taskEditCancel !== undefined) {
+    resetTaskEditState(true);
+    state.ui.taskForms.task = false;
+    renderDayOps();
+    return;
+  }
+
   if (target.dataset.dayopsAdd) {
     addDayOpsItem(target.dataset.dayopsAdd);
+    return;
+  }
+
+  if (target.dataset.dayopsEdit) {
+    const [type, id] = target.dataset.dayopsEdit.split(":");
+    startDayOpsEdit(type, id);
     return;
   }
 
@@ -1816,6 +1890,11 @@ function handleChange(event) {
     bucket[target.dataset.routineKey] = target.checked;
     persistDailyLogs(false);
     toggleCheckedClass(target);
+    if (target.dataset.routineType === "morning") {
+      renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
+        collapseCompleted: true,
+      });
+    }
     updateProgressUi();
     return;
   }
@@ -1847,11 +1926,11 @@ function handleInput(event) {
 
   if (target.dataset.timeMachineField) {
     getCurrentLog().bootSequence.timeMachine10m.futureVision[target.dataset.timeMachineField] = target.value;
-    persistDailyLogs(false);
     if (target.dataset.timeMachineField === "todayActionFromFuture") {
-      document.getElementById("mit-candidate-text").textContent = target.value || "未入力";
-      renderHandoff();
+      syncPrimaryMit(getCurrentLog());
+      document.getElementById("mit1").value = getCurrentLog().mit.mit1;
     }
+    persistDailyLogs(false);
     return;
   }
 

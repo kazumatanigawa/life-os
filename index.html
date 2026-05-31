@@ -97,7 +97,6 @@
         <section class="screen hidden" id="today-screen">
           <div class="hero-card morning-hero">
             <div class="section-heading">
-              <p class="section-kicker">Morning Board</p>
               <h2 id="today-title">今日の設計</h2>
             </div>
             <div class="progress-wrap">
@@ -112,44 +111,28 @@
           </div>
 
           <div class="screen-grid">
-            <article class="card span-two">
+            <article class="card morning-card span-two">
               <div class="section-heading">
-                <p class="section-kicker">Handoff</p>
-                <h3>昨日からの申し送り</h3>
-              </div>
-              <div id="handoff-content" class="handoff-list"></div>
-            </article>
-
-            <article class="card morning-card">
-              <div class="section-heading">
-                <p class="section-kicker">Week Goal</p>
-                <h3>今週の目標</h3>
-              </div>
-              <textarea id="week-goal" rows="2" placeholder="今週のテーマ / 最優先KPIを短く書く"></textarea>
-            </article>
-
-            <article class="card morning-card">
-              <div class="section-heading">
-                <p class="section-kicker">Morning Routine</p>
                 <h3>朝ルーティン</h3>
               </div>
               <div id="morning-routine-list" class="routine-list"></div>
             </article>
 
-            <article class="card span-two">
+            <article class="card morning-card">
               <div class="section-heading">
-                <p class="section-kicker">Top 3</p>
-                <h3>今日の最重要3つ</h3>
+                <h3>今週の目標</h3>
               </div>
-              <div class="candidate-box">
-                <p class="candidate-label">未来からの今日の一手</p>
-                <p id="mit-candidate-text" class="candidate-text">未入力</p>
-                <button class="secondary-button" id="apply-mit-candidate-button" type="button">最重要1に反映する</button>
+              <textarea id="week-goal" rows="2" placeholder="今週のテーマ / 最優先KPIを短く書く"></textarea>
+            </article>
+
+            <article class="card morning-card span-two">
+              <div class="section-heading">
+                <h3>今日の最重要3つ</h3>
               </div>
               <div class="stack-fields triple-fields">
                 <label>
                   <span>最重要1</span>
-                  <input id="mit1" type="text" placeholder="今日最重要の一手" />
+                  <input id="mit1" type="text" placeholder="未来から自動反映" readonly />
                 </label>
                 <label>
                   <span>最重要2</span>
@@ -164,7 +147,7 @@
           </div>
 
           <div class="toolbar">
-            <button class="primary-button" data-screen="dayOps" type="button">タスクへ進む</button>
+            <button class="primary-button" data-screen="dayOps" type="button">1日をはじめる</button>
           </div>
         </section>
 
@@ -172,7 +155,6 @@
           <div class="screen-grid">
             <article class="card span-two">
               <div class="section-heading">
-                <p class="section-kicker">Morning Focus</p>
                 <h3>今日の最重要3つ</h3>
               </div>
               <div class="task-focus-list" id="task-focus-list"></div>
@@ -183,16 +165,14 @@
 
             <article class="card span-two">
               <div class="section-heading">
-                <p class="section-kicker">Carry Over</p>
                 <h3>前日からの引き継ぎ</h3>
               </div>
-              <div class="carryover-summary-card" id="carryover-summary-list"></div>
+              <div class="task-handoff-card" id="task-handoff-card"></div>
             </article>
 
             <article class="card span-two task-section" id="task-section-contact">
               <button class="task-section-header" data-task-section-toggle="contact" type="button">
                 <div>
-                  <p class="section-kicker">Contact</p>
                   <h3>連絡</h3>
                 </div>
                 <div class="task-section-summary" id="task-section-summary-contact"></div>
@@ -231,8 +211,7 @@
             <article class="card span-two task-section" id="task-section-schedule121">
               <button class="task-section-header" data-task-section-toggle="schedule121" type="button">
                 <div>
-                  <p class="section-kicker">121</p>
-                  <h3>121日程調整</h3>
+                  <h3>日程調整</h3>
                 </div>
                 <div class="task-section-summary" id="task-section-summary-schedule121"></div>
                 <span class="task-section-chevron" aria-hidden="true"></span>
@@ -265,7 +244,6 @@
             <article class="card span-two task-section" id="task-section-task">
               <button class="task-section-header" data-task-section-toggle="task" type="button">
                 <div>
-                  <p class="section-kicker">Task</p>
                   <h3>作業タスク</h3>
                 </div>
                 <div class="task-section-summary" id="task-section-summary-task"></div>
@@ -295,14 +273,14 @@
                   </label>
                 </div>
                 <div class="action-row compact-row hidden" id="task-form-actions">
-                  <button class="secondary-button" data-dayops-add="task" type="button">タスクを追加</button>
+                  <button class="secondary-button" data-dayops-add="task" id="task-form-submit-button" type="button">タスクを追加</button>
+                  <button class="ghost-button hidden" data-task-edit-cancel type="button">編集をやめる</button>
                 </div>
               </div>
             </article>
 
             <article class="card span-two">
               <div class="section-heading">
-                <p class="section-kicker">Expense</p>
                 <h3>支出メモ</h3>
               </div>
               <textarea id="expense-memo" rows="7" placeholder="発生した支出を雑にメモしておく"></textarea>
