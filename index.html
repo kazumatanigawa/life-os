@@ -15,7 +15,6 @@
         </div>
         <div class="header-meta">
           <div class="date-pill" id="current-date-display"></div>
-          <button class="ghost-button" id="quick-save-button" type="button">保存</button>
         </div>
       </header>
 
@@ -27,6 +26,11 @@
         <div class="progress-bar compact">
           <div class="progress-fill" id="floating-progress-fill"></div>
         </div>
+      </div>
+
+      <div class="floating-timer hidden" id="floating-timer">
+        <span class="floating-timer-label">10m Time Machine</span>
+        <strong id="floating-timer-text">10:00</strong>
       </div>
 
       <main class="main-content">
@@ -62,6 +66,9 @@
           </div>
 
           <div class="boot-panel hidden" id="time-machine-view">
+            <div class="section-heading time-machine-heading">
+              <h3>10mタイムマシン</h3>
+            </div>
             <div class="card timer-card">
               <div class="timer-face" id="timer-display">10:00</div>
               <button class="primary-button" id="timer-start-button" type="button">タイマー開始</button>
@@ -157,8 +164,124 @@
           </div>
 
           <div class="toolbar">
-            <button class="primary-button" data-screen="night" type="button">夜ルーティンへ進む</button>
-            <button class="ghost-button" id="dashboard-save-button" type="button">保存する</button>
+            <button class="primary-button" data-screen="dayOps" type="button">タスクへ進む</button>
+          </div>
+        </section>
+
+        <section class="screen hidden" id="day-ops-screen">
+          <div class="hero-card dayops-hero">
+            <div class="section-heading">
+              <p class="section-kicker">Task</p>
+              <h2>タスクを漏らさず整理する</h2>
+            </div>
+            <p class="support-text">発生した連絡、121日程調整、タスクをその場で拾い、今日やるか明日に回すかを必ず決める。</p>
+          </div>
+
+          <div class="screen-grid">
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Carry Over</p>
+                <h3>前日からの引き継ぎ</h3>
+              </div>
+              <div class="carryover-summary-list" id="carryover-summary-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Contact</p>
+                <h3>連絡</h3>
+              </div>
+              <div class="dayops-form-grid contact-form">
+                <label>
+                  <span>名前</span>
+                  <input id="contact-name" data-dayops-draft="contact:name" type="text" placeholder="相手の名前" />
+                </label>
+                <label>
+                  <span>ツール</span>
+                  <input
+                    id="contact-tool"
+                    data-dayops-draft="contact:tool"
+                    type="text"
+                    placeholder="LINE / FB / Instagram / 電話"
+                  />
+                </label>
+                <label class="span-two">
+                  <span>要件</span>
+                  <input id="contact-requirement" data-dayops-draft="contact:requirement" type="text" placeholder="何を送るか" />
+                </label>
+              </div>
+              <div class="action-row">
+                <button class="secondary-button" data-dayops-add="contact" type="button">連絡を追加</button>
+              </div>
+              <div class="dayops-list" id="contact-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">121</p>
+                <h3>121日程調整</h3>
+              </div>
+              <div class="dayops-form-grid schedule-form">
+                <label>
+                  <span>名前</span>
+                  <input id="schedule-name" data-dayops-draft="schedule121:name" type="text" placeholder="相手の名前" />
+                </label>
+                <label>
+                  <span>その人の仕事</span>
+                  <input id="schedule-job" data-dayops-draft="schedule121:job" type="text" placeholder="職業・肩書き" />
+                </label>
+                <label class="span-two">
+                  <span>連絡ツール</span>
+                  <input id="schedule-tool" data-dayops-draft="schedule121:tool" type="text" placeholder="LINE / FB / Instagram" />
+                </label>
+              </div>
+              <div class="action-row">
+                <button class="secondary-button" data-dayops-add="schedule121" type="button">日程調整を追加</button>
+              </div>
+              <div class="dayops-list" id="schedule121-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Task</p>
+                <h3>作業タスク</h3>
+              </div>
+              <div class="dayops-form-grid task-form">
+                <label>
+                  <span>作業</span>
+                  <input id="task-title" data-dayops-draft="task:title" type="text" placeholder="やる作業" />
+                </label>
+                <label>
+                  <span>ゴール</span>
+                  <input id="task-goal" data-dayops-draft="task:goal" type="text" placeholder="完了条件" />
+                </label>
+                <label>
+                  <span>何分かかるか</span>
+                  <input id="task-estimated-minutes" data-dayops-draft="task:estimatedMinutes" type="number" min="1" inputmode="numeric" placeholder="15" />
+                </label>
+                <label>
+                  <span>いつやるか</span>
+                  <input id="task-when" data-dayops-draft="task:when" type="text" placeholder="14:30 / 営業後 / 移動中" />
+                </label>
+              </div>
+              <div class="action-row">
+                <button class="secondary-button" data-dayops-add="task" type="button">タスクを追加</button>
+              </div>
+              <div class="dayops-list" id="task-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Expense</p>
+                <h3>支出メモ</h3>
+              </div>
+              <textarea id="expense-memo" rows="7" placeholder="発生した支出を雑にメモしておく"></textarea>
+            </article>
+          </div>
+
+          <div class="toolbar">
+            <span class="inline-note" id="dayops-status-note">未整理 0 件</span>
+            <button class="primary-button" id="dayops-next-button" type="button">夜ルーティンへ進む</button>
           </div>
         </section>
 
@@ -248,8 +371,6 @@
 
           <div class="toolbar">
             <button class="primary-button" id="markdown-export-button" type="button">Markdown出力</button>
-            <button class="secondary-button" id="json-export-button" type="button">JSON出力</button>
-            <button class="ghost-button" id="night-save-button" type="button">保存する</button>
           </div>
         </section>
 
@@ -268,7 +389,6 @@
                 <h3 id="logs-detail-title">ログ詳細</h3>
                 <div class="toolbar compact">
                   <button class="secondary-button" id="logs-markdown-button" type="button">Markdown出力</button>
-                  <button class="secondary-button" id="logs-json-button" type="button">JSON出力</button>
                 </div>
               </div>
               <div id="logs-detail-content" class="log-detail"></div>
@@ -309,9 +429,6 @@
               </p>
             </article>
           </div>
-          <div class="toolbar">
-            <button class="primary-button" id="settings-save-button" type="button">設定を保存する</button>
-          </div>
         </section>
 
         <section class="output-panel hidden" id="output-panel">
@@ -321,6 +438,7 @@
               <h3 id="output-title">出力</h3>
             </div>
             <div class="toolbar compact">
+              <button class="secondary-button" id="share-output-button" type="button">共有</button>
               <button class="secondary-button" id="copy-output-button" type="button">コピー</button>
               <button class="ghost-button" id="close-output-button" type="button">閉じる</button>
             </div>
@@ -331,12 +449,14 @@
 
       <nav class="app-nav hidden" id="app-nav">
         <button class="nav-button active" data-screen="today" type="button">Today</button>
+        <button class="nav-button" data-screen="dayOps" type="button">タスク</button>
         <button class="nav-button" data-screen="night" type="button">Night</button>
         <button class="nav-button" data-screen="logs" type="button">Logs</button>
         <button class="nav-button" data-screen="settings" type="button">Settings</button>
       </nav>
     </div>
 
+    <button class="save-fab hidden" id="floating-save-button" type="button">保存する</button>
     <div class="toast hidden" id="toast"></div>
 
     <script src="app.js"></script>
