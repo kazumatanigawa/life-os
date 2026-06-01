@@ -194,6 +194,8 @@ const state = {
     reschedulingTaskDate: "",
     reschedulingTaskStart: "",
     reschedulingTaskDuration: "",
+    expandedTaskItems: {},
+    completedTasksOpen: false,
   },
   saveState: {
     status: "saved",
@@ -238,7 +240,9 @@ function createDefaultTaskItem(type, overrides = {}) {
     endTime: "",
     durationMinutes: null,
     completed: false,
+    completedAt: null,
     status: "todo",
+    isImportantToday: false,
     postponedFrom: null,
     postponedTo: null,
     priority: null,
@@ -265,6 +269,7 @@ function createDefaultPriorityItems(date) {
       id: `priority-${date}-${index + 1}`,
       scheduledDate: date,
       priority: "high",
+      isImportantToday: true,
     })
   );
 }
@@ -588,9 +593,11 @@ function hydratePriorityItem(dateKey, savedItem, index) {
       endTime: saved.endTime || "",
       durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime),
       completed: Boolean(saved.completed),
+      completedAt: saved.completedAt || null,
       status: normalizeLegacyStatus(saved.status, saved.completed),
       memo: saved.memo || "",
       priority: saved.priority || "high",
+      isImportantToday: true,
     }),
     saved
   );
@@ -661,6 +668,12 @@ function syncPrimaryMit(log = getCurrentLog()) {
   }
   log.topPriorities[0].title = firstTitle;
   log.topPriorities[0].scheduledDate = log.date;
+  log.topPriorities.forEach((item, index) => {
+    item.isImportantToday = true;
+    item.priority = item.priority || "high";
+    item.scheduledDate = item.scheduledDate || log.date;
+    item.rank = index + 1;
+  });
   log.mit.mit1 = firstTitle;
   log.mit.mit2 = log.topPriorities[1] ? log.topPriorities[1].title : "";
   log.mit.mit3 = log.topPriorities[2] ? log.topPriorities[2].title : "";
@@ -886,17 +899,19 @@ function getTimelineSourceCollections(log = getCurrentLog()) {
 
 function getAllActionItems(log = getCurrentLog()) {
   const seen = new Set();
-  return [...(log.handoverItems || []), ...getTimelineSourceCollections(log).flatMap((entry) => entry.items)].filter((item) => {
-    if (!itemHasContent(item)) {
-      return false;
-    }
-    const key = item.sourceItemId ? `${item.id}:${item.sourceItemId}` : item.id;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
+  return getTimelineSourceCollections(log)
+    .flatMap((entry) => entry.items)
+    .filter((item) => {
+      if (!itemHasContent(item)) {
+        return false;
+      }
+      const key = item.sourceItemId ? `${item.id}:${item.sourceItemId}` : item.id;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
 }
 
 function findActionItemById(id, log = getCurrentLog()) {
@@ -949,10 +964,10 @@ function getTimelineItems(dateKey = state.currentDateKey) {
       if (leftStart !== rightStart) {
         return leftStart.localeCompare(rightStart);
       }
-      const leftEnd = left.endTime || "99:99";
-      const rightEnd = right.endTime || "99:99";
-      if (leftEnd !== rightEnd) {
-        return leftEnd.localeCompare(rightEnd);
+      const leftDuration = getItemDurationMinutes(left) || 9999;
+      const rightDuration = getItemDurationMinutes(right) || 9999;
+      if (leftDuration !== rightDuration) {
+        return leftDuration - rightDuration;
       }
       return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
     });
@@ -964,6 +979,14 @@ function getUnscheduledTodayItems(dateKey = state.currentDateKey) {
     .flatMap((entry) => entry.items)
     .filter((item) => isItemVisibleToday(item, dateKey))
     .filter((item) => !String(item.startTime || "").trim());
+}
+
+function getOpenTaskItems(log = getCurrentLog()) {
+  return (log.taskItems || []).filter((item) => item.status !== "deleted" && !(item.completed || item.status === "done"));
+}
+
+function getCompletedTaskItems(log = getCurrentLog()) {
+  return (log.taskItems || []).filter((item) => item.status !== "deleted" && (item.completed || item.status === "done"));
 }
 
 function getHandoverCandidates(dateKey = state.currentDateKey) {
@@ -1192,11 +1215,25 @@ function ensureTaskUiState(log = getCurrentLog()) {
   state.ui.reschedulingTaskDate = "";
   state.ui.reschedulingTaskStart = "";
   state.ui.reschedulingTaskDuration = "";
+  state.ui.expandedTaskItems = {};
+  state.ui.completedTasksOpen = false;
 }
 
 function toggleTaskSection(type) {
   ensureTaskUiState();
   state.ui.taskSections[type] = !state.ui.taskSections[type];
+  renderDayOps();
+}
+
+function toggleTaskItemExpanded(id) {
+  ensureTaskUiState();
+  state.ui.expandedTaskItems[id] = !state.ui.expandedTaskItems[id];
+  renderDayOps();
+}
+
+function toggleCompletedTaskGroup() {
+  ensureTaskUiState();
+  state.ui.completedTasksOpen = !state.ui.completedTasksOpen;
   renderDayOps();
 }
 
@@ -1295,11 +1332,12 @@ function renderTaskTimeline() {
     container.innerHTML = timelineItems
       .map(
         (item) => `
-          <article class="timeline-item status-${getItemStatusClass(item)}">
+          <article class="timeline-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""}">
             <div class="timeline-time">${escapeHtml(item.startTime || "--:--")}</div>
             <div class="timeline-card">
               <div class="timeline-card-head">
                 <div class="timeline-card-main">
+                  ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
                   <h4>${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
                   <p>${escapeHtml(getTimelineSubtitle(item))}</p>
                 </div>
@@ -1308,6 +1346,12 @@ function renderTaskTimeline() {
                 <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
                 <span class="meta-chip">${escapeHtml(getItemDurationMinutes(item) ? `${getItemDurationMinutes(item)}分` : "所要未設定")}</span>
                 <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
+              </div>
+              <div class="timeline-card-foot">
+                <p class="timeline-card-meta">${escapeHtml(buildScheduleMetaLine(item) || "日時未設定")}</p>
+                <div class="dayops-actions timeline-actions">
+                  ${buildTaskActionButtons(item)}
+                </div>
               </div>
             </div>
           </article>
@@ -1330,8 +1374,9 @@ function renderTaskTimeline() {
         ${unscheduledItems
           .map(
             (item) => `
-              <article class="dayops-item status-${getItemStatusClass(item)}">
+              <article class="dayops-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""}">
                 <div class="dayops-item-content">
+                  ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
                   <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
                   <p>${escapeHtml(getTimelineSubtitle(item) || "各セクションから時間を設定してください")}</p>
                   <div class="dayops-item-meta">
@@ -1339,6 +1384,9 @@ function renderTaskTimeline() {
                     <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
                     <span class="meta-chip">時間未設定</span>
                   </div>
+                </div>
+                <div class="dayops-actions timeline-actions">
+                  ${buildTaskActionButtons(item)}
                 </div>
               </article>
             `
@@ -1493,6 +1541,9 @@ function renderRoutineList(containerId, items, values, type, options = {}) {
 
 function renderTaskHandoffCard() {
   const handoff = document.getElementById("task-handoff-card");
+  if (!handoff) {
+    return;
+  }
   const items = (getCurrentLog().handoverItems || []).filter((item) => !item.handoverResolved && itemNeedsReschedule(item));
   if (!items.length) {
     handoff.innerHTML = '<div class="task-handoff-empty">昨日から引き継ぐものはありません。</div>';
@@ -1638,6 +1689,9 @@ function renderToday() {
 function renderTaskFocusList() {
   const log = getCurrentLog();
   const container = document.getElementById("task-focus-list");
+  if (!container) {
+    return;
+  }
   const priorities = (log.topPriorities || []).filter((item) => itemHasContent(item));
   if (!priorities.length) {
     container.innerHTML = '<div class="dayops-empty">今日の最重要はまだ未設定です。</div>';
@@ -1668,7 +1722,8 @@ function renderTaskFocusList() {
 }
 
 function renderTaskSection(type, items) {
-  const visibleItems = items.filter((item) => item.status !== "deleted");
+  const visibleItems =
+    type === DAY_OPS_TYPES.task ? getOpenTaskItems() : items.filter((item) => item.status !== "deleted");
   const article = document.getElementById(`task-section-${type}`);
   const body = document.getElementById(`task-section-body-${type}`);
   const summary = document.getElementById(`task-section-summary-${type}`);
@@ -1718,7 +1773,7 @@ function getItemStatusClass(item) {
 }
 
 function getTaskTypeLabel(item) {
-  if (item.type === "priority") {
+  if (item.isImportantToday || item.type === "priority") {
     return "最重要";
   }
   if (item.type === "contact") {
@@ -1762,6 +1817,22 @@ function buildScheduleMetaLine(item) {
   return parts.join(" / ");
 }
 
+function buildTaskActionButtons(item, options = {}) {
+  const isDone = item.completed || item.status === "done";
+  const includeDelete = Boolean(options.includeDelete);
+  const type = options.type || item.type || DAY_OPS_TYPES.task;
+  const deleteAction = includeDelete
+    ? `<button class="action-button action-delete" data-dayops-delete="${type}:${item.id}" type="button">削除</button>`
+    : "";
+  return `
+    <button class="action-button action-complete ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">✓ 完了</button>
+    <button class="action-button action-reset ${!isDone ? "is-active" : ""}" data-item-reset="${item.id}" type="button">未着手</button>
+    <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
+    <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
+    ${deleteAction}
+  `;
+}
+
 function getTimelineSubtitle(item) {
   if (item.type === "contact") {
     return [item.contactPerson, item.description, item.contactTool === "その他" ? item.contactToolOther : item.contactTool].filter(Boolean).join(" / ");
@@ -1801,7 +1872,7 @@ function buildDayOpsTitle(item) {
 
 function renderDayOpsList(containerId, items, type) {
   const container = document.getElementById(containerId);
-  const visibleItems = items.filter((item) => item.status !== "deleted");
+  const visibleItems = type === DAY_OPS_TYPES.task ? getOpenTaskItems() : items.filter((item) => item.status !== "deleted");
   if (!visibleItems.length) {
     container.innerHTML = '<div class="dayops-empty">まだ項目はありません。</div>';
     return;
@@ -1812,25 +1883,51 @@ function renderDayOpsList(containerId, items, type) {
       const meta = buildDayOpsMeta(item);
       const isDone = item.completed || item.status === "done";
       const isRescheduling = state.ui.reschedulingTaskId === item.id;
+      const isTask = type === DAY_OPS_TYPES.task;
+      const isExpanded = Boolean(state.ui.expandedTaskItems[item.id]);
+      const scheduleMeta = buildScheduleMetaLine(item) || "日時未設定";
+      const summaryMeta = [item.priority ? `優先度 ${item.priority}` : "", item.scheduledDate || ""].filter(Boolean).join(" / ");
       return `
-        <article class="dayops-item status-${getItemStatusClass(item)}">
-          <div class="dayops-item-header">
-            <div class="dayops-item-content">
-              <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
-              <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
-              <div class="dayops-item-meta">
-                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
-                ${meta.map((entry) => `<span class="meta-chip">${escapeHtml(entry)}</span>`).join("")}
-              </div>
+        <article class="dayops-item status-${getItemStatusClass(item)} ${isTask ? "task-accordion-item" : ""} ${isExpanded ? "is-expanded" : ""}">
+          ${
+            isTask
+              ? `<button class="task-accordion-toggle" data-task-item-toggle="${item.id}" type="button">
+                  <div class="task-accordion-main">
+                    <span class="status-dot status-${getItemStatusClass(item)}" aria-hidden="true"></span>
+                    <div class="task-accordion-copy">
+                      <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
+                      ${summaryMeta ? `<p class="task-accordion-summary">${escapeHtml(summaryMeta)}</p>` : ""}
+                    </div>
+                  </div>
+                  <span class="task-section-chevron" aria-hidden="true"></span>
+                </button>`
+              : `<div class="dayops-item-header">
+                  <div class="dayops-item-content">
+                    <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
+                    <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
+                    <div class="dayops-item-meta">
+                      <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                      ${meta.map((entry) => `<span class="meta-chip">${escapeHtml(entry)}</span>`).join("")}
+                    </div>
+                  </div>
+                </div>`
+          }
+          <div class="${isTask ? `task-accordion-body ${isExpanded ? "" : "hidden"}` : ""}">
+            ${
+              isTask
+                ? `<div class="dayops-item-content">
+                    <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
+                    <div class="dayops-item-meta">
+                      <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                      <span class="meta-chip">${escapeHtml(scheduleMeta)}</span>
+                      ${item.memo ? `<span class="meta-chip">メモあり</span>` : ""}
+                    </div>
+                  </div>`
+                : ""
+            }
+            <div class="dayops-actions">
+              ${buildTaskActionButtons(item, { includeDelete: true, type })}
             </div>
-          </div>
-          <div class="dayops-actions">
-            <button class="action-button action-complete ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">完了</button>
-            <button class="action-button action-reset ${!isDone ? "is-active" : ""}" data-item-reset="${item.id}" type="button">未着手</button>
-            <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
-            <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
-            <button class="action-button action-delete" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
-          </div>
           ${
             isRescheduling
               ? `<div class="task-reschedule-panel">
@@ -1855,9 +1952,38 @@ function renderDayOpsList(containerId, items, type) {
                 </div>`
               : ""
           }
+          </div>
         </article>
       `;
     })
+    .join("");
+}
+
+function renderCompletedTaskList() {
+  const group = document.getElementById("task-completed-group");
+  const count = document.getElementById("task-completed-count");
+  const list = document.getElementById("task-completed-list");
+  if (!group || !count || !list) {
+    return;
+  }
+  const completedItems = getCompletedTaskItems();
+  group.classList.toggle("hidden", completedItems.length === 0);
+  count.textContent = `${completedItems.length}件`;
+  group.classList.toggle("is-open", Boolean(state.ui.completedTasksOpen));
+  list.classList.toggle("hidden", !state.ui.completedTasksOpen);
+  if (!completedItems.length) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = completedItems
+    .map(
+      (item) => `
+        <article class="completed-task-item">
+          <span class="completed-task-label">完了</span>
+          <strong>${escapeHtml(buildDayOpsTitle(item))}</strong>
+        </article>
+      `
+    )
     .join("");
 }
 
@@ -1865,7 +1991,6 @@ function renderDayOps() {
   const log = getCurrentLog();
   ensureTaskUiState(log);
   syncPrimaryMit(log);
-  ensureHandoverItems();
   document.getElementById("contact-date").value = state.dayOpsDrafts.contact.scheduledDate || state.currentDateKey;
   document.getElementById("contact-start").value = state.dayOpsDrafts.contact.startTime;
   document.getElementById("contact-end").value = state.dayOpsDrafts.contact.endTime;
@@ -1897,8 +2022,6 @@ function renderDayOps() {
   document.getElementById("global-reschedule-duration").value = state.ui.reschedulingTaskDuration;
   document.getElementById("global-reschedule-panel").classList.toggle("hidden", !state.ui.reschedulingTaskId);
 
-  renderTaskHandoffCard();
-  renderTaskFocusList();
   renderDayOpsList("contact-list", log.contactItems, DAY_OPS_TYPES.contact);
   renderDayOpsList("schedule121-list", log.scheduleItems, DAY_OPS_TYPES.schedule121);
   renderDayOpsList("task-list", log.taskItems, DAY_OPS_TYPES.task);
@@ -1906,6 +2029,7 @@ function renderDayOps() {
   renderTaskSection(DAY_OPS_TYPES.contact, log.contactItems);
   renderTaskSection(DAY_OPS_TYPES.schedule121, log.scheduleItems);
   renderTaskSection(DAY_OPS_TYPES.task, log.taskItems);
+  renderCompletedTaskList();
   toggleToolOtherVisibility("contact", state.dayOpsDrafts.contact.contactTool);
   toggleToolOtherVisibility("schedule121", state.dayOpsDrafts.schedule121.contactTool);
 
@@ -2501,13 +2625,16 @@ function markItemCompleted(id, checked) {
   if (!item) {
     return;
   }
+  const completedAt = checked ? new Date().toISOString() : null;
   item.completed = checked;
+  item.completedAt = completedAt;
   item.status = checked ? "done" : "todo";
   item.updatedAt = new Date().toISOString();
   if (item.sourceItemId) {
     const source = findSourceItemById(item.sourceItemId);
     if (source) {
       source.completed = checked;
+      source.completedAt = completedAt;
       source.status = checked ? "done" : "todo";
       source.updatedAt = item.updatedAt;
     }
@@ -2529,6 +2656,7 @@ function postponeItemToTomorrow(id) {
   updateTaskSchedule(id, tomorrow, item.startTime || "", getItemDurationMinutes(item));
   const target = findItemById(id);
   target.completed = false;
+  target.completedAt = null;
   target.status = "postponed";
   target.postponedFrom = state.currentDateKey;
   target.postponedTo = tomorrow;
@@ -2537,6 +2665,7 @@ function postponeItemToTomorrow(id) {
     const source = findSourceItemById(target.sourceItemId);
     if (source) {
       source.completed = false;
+      source.completedAt = null;
       source.status = "postponed";
       source.postponedFrom = state.currentDateKey;
       source.postponedTo = tomorrow;
@@ -2711,6 +2840,16 @@ function handleClick(event) {
 
   if (target.dataset.taskSectionToggle) {
     toggleTaskSection(target.dataset.taskSectionToggle);
+    return;
+  }
+
+  if (target.dataset.taskItemToggle) {
+    toggleTaskItemExpanded(target.dataset.taskItemToggle);
+    return;
+  }
+
+  if (target.id === "task-completed-toggle") {
+    toggleCompletedTaskGroup();
     return;
   }
 
