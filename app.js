@@ -1,7 +1,10 @@
 const STORAGE_KEYS = {
+  appState: "lifeOS_appState",
   dailyLogs: "lifeOS_dailyLogs",
   settings: "lifeOS_settings",
 };
+
+const APP_VERSION = "2026-06-01-task-rebuild";
 
 const AIRMATE_WEB_URL = "https://airmate.jp/realtime/";
 const AIRMATE_APP_URL =
@@ -12,6 +15,8 @@ const DAY_OPS_TYPES = {
   schedule121: "schedule121",
   task: "task",
 };
+
+const CONTACT_TOOL_OPTIONS = ["LINE", "FB", "Instagram", "電話", "直接", "その他"];
 
 const DAY_OPS_TYPE_CONFIG = {
   [DAY_OPS_TYPES.contact]: {
@@ -128,6 +133,7 @@ const DEFAULT_SETTINGS = {
 const state = {
   settings: null,
   dailyLogs: {},
+  appMeta: null,
   currentDateKey: "",
   selectedLogDate: "",
   activeScreen: "boot",
@@ -144,20 +150,34 @@ const state = {
   toastTimer: null,
   dayOpsDrafts: {
     contact: {
+      scheduledDate: "",
+      startTime: "",
+      endTime: "",
       name: "",
-      tool: "",
       requirement: "",
+      contactTool: "",
+      contactToolOther: "",
+      memo: "",
     },
     schedule121: {
+      scheduledDate: "",
+      startTime: "",
+      endTime: "",
       name: "",
       job: "",
-      tool: "",
+      contactTool: "",
+      contactToolOther: "",
+      candidateDatesText: "",
+      memo: "",
     },
     task: {
+      scheduledDate: "",
+      startTime: "",
+      endTime: "",
       title: "",
-      goal: "",
-      estimatedMinutes: "",
-      when: "",
+      description: "",
+      priority: "",
+      memo: "",
     },
   },
   ui: {
@@ -169,9 +189,25 @@ const state = {
       task: false,
     },
     reschedulingTaskId: null,
-    reschedulingTaskValue: "",
+    reschedulingTaskDate: "",
+    reschedulingTaskStart: "",
+    reschedulingTaskEnd: "",
+  },
+  saveState: {
+    status: "saved",
+    debounceTimer: null,
   },
 };
+
+function createDefaultAppMeta() {
+  return {
+    version: APP_VERSION,
+    lastActivePage: "today",
+    lastActiveDate: "",
+    lastOpenedAt: "",
+    morningCompletedDate: null,
+  };
+}
 
 function createDefaultReminder(overrides = {}) {
   return {
@@ -188,48 +224,68 @@ function createDefaultFutureVision() {
   return Object.fromEntries(TIME_MACHINE_FIELDS.map((field) => [field.key, ""]));
 }
 
-function createDefaultDayOpsItem(type, overrides = {}) {
+function createDefaultTaskItem(type, overrides = {}) {
   const now = new Date().toISOString();
-  const base = {
+  return {
     id: `${type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     type,
-    status: "open",
-    sourceDate: state.currentDateKey || getDateKey(),
-    carriedOverFrom: null,
-    carriedForwardTo: null,
+    title: "",
+    description: "",
+    scheduledDate: state.currentDateKey || getDateKey(),
+    startTime: "",
+    endTime: "",
+    completed: false,
+    status: "todo",
+    postponedFrom: null,
+    postponedTo: null,
+    priority: null,
+    contactPerson: null,
+    contactTool: null,
+    contactToolOther: null,
+    candidateDates: [],
+    memo: "",
     createdAt: now,
     updatedAt: now,
-    completedAt: null,
+    sourceDate: state.currentDateKey || getDateKey(),
+    sourceItemId: null,
+    sourceType: null,
+    originDate: null,
+    addedToTimeline: false,
+    handoverResolved: false,
+    ...overrides,
   };
+}
 
+function createDefaultPriorityItems(date) {
+  return Array.from({ length: 3 }, (_, index) =>
+    createDefaultTaskItem("priority", {
+      id: `priority-${date}-${index + 1}`,
+      scheduledDate: date,
+      priority: "high",
+    })
+  );
+}
+
+function createDefaultDayOpsItem(type, overrides = {}) {
   if (type === DAY_OPS_TYPES.contact) {
-    return {
-      ...base,
-      name: "",
-      tool: "",
-      requirement: "",
+    return createDefaultTaskItem("contact", {
+      contactPerson: "",
+      title: "",
+      description: "",
       ...overrides,
-    };
+    });
   }
 
   if (type === DAY_OPS_TYPES.schedule121) {
-    return {
-      ...base,
-      name: "",
-      job: "",
-      tool: "",
+    return createDefaultTaskItem("schedule", {
+      contactPerson: "",
+      title: "",
+      description: "",
       ...overrides,
-    };
+    });
   }
 
-  return {
-    ...base,
-    title: "",
-    goal: "",
-    estimatedMinutes: "",
-    when: "",
-    ...overrides,
-  };
+  return createDefaultTaskItem("task", overrides);
 }
 
 function createDefaultDailyLog(date) {
@@ -254,6 +310,12 @@ function createDefaultDailyLog(date) {
     },
     weekGoal: "",
     morningRoutine: Object.fromEntries(MORNING_ROUTINE_ITEMS.map((item) => [item.key, false])),
+    topPriorities: createDefaultPriorityItems(date),
+    handoverItems: [],
+    timelineItems: [],
+    contactItems: [],
+    scheduleItems: [],
+    taskItems: [],
     mit: {
       mit1: "",
       mit2: "",
@@ -313,8 +375,112 @@ function mergeWithDefaults(defaultValue, savedValue) {
   return merged;
 }
 
+function normalizeLegacyStatus(status, completed = false) {
+  if (completed || status === "done") {
+    return "done";
+  }
+  if (status === "carryOver") {
+    return "postponed";
+  }
+  if (status === "deleted") {
+    return "deleted";
+  }
+  if (status === "pending" || status === "postponed" || status === "doing") {
+    return status;
+  }
+  return "todo";
+}
+
+function normalizeContactTool(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return { contactTool: "", contactToolOther: "" };
+  }
+  if (CONTACT_TOOL_OPTIONS.includes(text)) {
+    return { contactTool: text, contactToolOther: "" };
+  }
+  return { contactTool: "その他", contactToolOther: text };
+}
+
+function parseLegacyWhen(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return { startTime: "", endTime: "" };
+  }
+  const range = text.match(/^(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})$/);
+  if (range) {
+    return { startTime: range[1], endTime: range[2] };
+  }
+  if (/^\d{1,2}:\d{2}$/.test(text)) {
+    return { startTime: text, endTime: "" };
+  }
+  return { startTime: "", endTime: "" };
+}
+
 function hydrateDayOpsItem(type, savedItem) {
-  return mergeWithDefaults(createDefaultDayOpsItem(type), savedItem || {});
+  const saved = savedItem || {};
+  if (type === DAY_OPS_TYPES.contact) {
+    const tool = normalizeContactTool(saved.contactTool || saved.tool);
+    return mergeWithDefaults(
+      createDefaultDayOpsItem(type, {
+        title: saved.title || saved.requirement || saved.name || "",
+        description: saved.description || saved.requirement || "",
+        contactPerson: saved.contactPerson || saved.name || "",
+        contactTool: tool.contactTool,
+        contactToolOther: saved.contactToolOther || tool.contactToolOther,
+        memo: saved.memo || "",
+        scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
+        startTime: saved.startTime || parseLegacyWhen(saved.when).startTime,
+        endTime: saved.endTime || parseLegacyWhen(saved.when).endTime,
+        completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
+        status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
+        postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
+        postponedTo: saved.postponedTo || saved.carriedForwardTo || null,
+      }),
+      saved
+    );
+  }
+
+  if (type === DAY_OPS_TYPES.schedule121) {
+    const tool = normalizeContactTool(saved.contactTool || saved.tool);
+    return mergeWithDefaults(
+      createDefaultDayOpsItem(type, {
+        title: saved.title || saved.job || saved.name || "",
+        description: saved.description || saved.job || "",
+        contactPerson: saved.contactPerson || saved.name || "",
+        contactTool: tool.contactTool,
+        contactToolOther: saved.contactToolOther || tool.contactToolOther,
+        candidateDates: Array.isArray(saved.candidateDates) ? saved.candidateDates : [],
+        memo: saved.memo || "",
+        scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
+        startTime: saved.startTime || parseLegacyWhen(saved.when).startTime,
+        endTime: saved.endTime || parseLegacyWhen(saved.when).endTime,
+        completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
+        status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
+        postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
+        postponedTo: saved.postponedTo || saved.carriedForwardTo || null,
+      }),
+      saved
+    );
+  }
+
+  const legacyTime = parseLegacyWhen(saved.when);
+  return mergeWithDefaults(
+    createDefaultDayOpsItem(type, {
+      title: saved.title || "",
+      description: saved.description || saved.goal || "",
+      memo: saved.memo || "",
+      priority: saved.priority || null,
+      scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
+      startTime: saved.startTime || legacyTime.startTime,
+      endTime: saved.endTime || legacyTime.endTime,
+      completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
+      status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
+      postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
+      postponedTo: saved.postponedTo || saved.carriedForwardTo || null,
+    }),
+    saved
+  );
 }
 
 function hydrateReminder(savedReminder) {
@@ -342,6 +508,34 @@ function hydrateFutureVision(savedFutureVision) {
   };
 }
 
+function hydratePriorityItem(dateKey, savedItem, index) {
+  const saved = savedItem || {};
+  return mergeWithDefaults(
+    createDefaultTaskItem("priority", {
+      id: saved.id || `priority-${dateKey}-${index + 1}`,
+      title: saved.title || "",
+      description: saved.description || "",
+      scheduledDate: saved.scheduledDate || dateKey,
+      startTime: saved.startTime || "",
+      endTime: saved.endTime || "",
+      completed: Boolean(saved.completed),
+      status: normalizeLegacyStatus(saved.status, saved.completed),
+      memo: saved.memo || "",
+      priority: saved.priority || "high",
+    }),
+    saved
+  );
+}
+
+function buildPrioritiesFromLegacyLog(dateKey, savedLog, futureVision) {
+  const legacyMit = savedLog && savedLog.mit ? savedLog.mit : {};
+  return [
+    hydratePriorityItem(dateKey, { title: futureVision.todayActionFromFuture || legacyMit.mit1 || "" }, 0),
+    hydratePriorityItem(dateKey, { title: legacyMit.mit2 || "" }, 1),
+    hydratePriorityItem(dateKey, { title: legacyMit.mit3 || "" }, 2),
+  ];
+}
+
 function hydrateDailyLog(dateKey, savedLog) {
   const merged = mergeWithDefaults(createDefaultDailyLog(dateKey), savedLog || {});
   merged.bootSequence.timeMachine10m.futureVision = hydrateFutureVision(
@@ -349,6 +543,24 @@ function hydrateDailyLog(dateKey, savedLog) {
       ? savedLog.bootSequence.timeMachine10m.futureVision
       : merged.bootSequence.timeMachine10m.futureVision
   );
+  merged.topPriorities = Array.isArray(savedLog && savedLog.topPriorities)
+    ? savedLog.topPriorities.map((item, index) => hydratePriorityItem(dateKey, item, index))
+    : buildPrioritiesFromLegacyLog(dateKey, savedLog, merged.bootSequence.timeMachine10m.futureVision);
+  merged.handoverItems = Array.isArray(savedLog && savedLog.handoverItems)
+    ? savedLog.handoverItems.map((item) => mergeWithDefaults(createDefaultTaskItem(item.type || "task"), item))
+    : [];
+  merged.timelineItems = Array.isArray(savedLog && savedLog.timelineItems)
+    ? savedLog.timelineItems.map((item) => mergeWithDefaults(createDefaultTaskItem("timeline"), item))
+    : [];
+  merged.contactItems = Array.isArray(savedLog && savedLog.contactItems)
+    ? savedLog.contactItems.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.contact, item))
+    : [];
+  merged.scheduleItems = Array.isArray(savedLog && savedLog.scheduleItems)
+    ? savedLog.scheduleItems.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.schedule121, item))
+    : [];
+  merged.taskItems = Array.isArray(savedLog && savedLog.taskItems)
+    ? savedLog.taskItems.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.task, item))
+    : [];
   merged.dayOps.contacts = Array.isArray(merged.dayOps.contacts)
     ? merged.dayOps.contacts.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.contact, item))
     : [];
@@ -361,11 +573,28 @@ function hydrateDailyLog(dateKey, savedLog) {
   merged.tomorrowReminder = Array.isArray(merged.tomorrowReminder)
     ? merged.tomorrowReminder.map((item) => hydrateReminder(item))
     : [];
+  if (!merged.contactItems.length && merged.dayOps.contacts.length) {
+    merged.contactItems = merged.dayOps.contacts.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.contact, item));
+  }
+  if (!merged.scheduleItems.length && merged.dayOps.schedule121.length) {
+    merged.scheduleItems = merged.dayOps.schedule121.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.schedule121, item));
+  }
+  if (!merged.taskItems.length && merged.dayOps.tasks.length) {
+    merged.taskItems = merged.dayOps.tasks.map((item) => hydrateDayOpsItem(DAY_OPS_TYPES.task, item));
+  }
   return merged;
 }
 
 function syncPrimaryMit(log = getCurrentLog()) {
-  log.mit.mit1 = log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture || "";
+  const firstTitle = log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture || "";
+  if (!Array.isArray(log.topPriorities) || !log.topPriorities.length) {
+    log.topPriorities = createDefaultPriorityItems(log.date);
+  }
+  log.topPriorities[0].title = firstTitle;
+  log.topPriorities[0].scheduledDate = log.date;
+  log.mit.mit1 = firstTitle;
+  log.mit.mit2 = log.topPriorities[1] ? log.topPriorities[1].title : "";
+  log.mit.mit3 = log.topPriorities[2] ? log.topPriorities[2].title : "";
 }
 
 function getDateKey(date = new Date()) {
@@ -426,30 +655,128 @@ function saveJson(key, value) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function loadSettings() {
-  const saved = loadJson(STORAGE_KEYS.settings, null);
+function loadSettings(savedSettings = null) {
+  const saved = savedSettings || loadJson(STORAGE_KEYS.settings, null);
   const merged = mergeWithDefaults(DEFAULT_SETTINGS, saved || {});
   if (merged.links.storeStatus === AIRMATE_WEB_URL) {
     merged.links.storeStatus = AIRMATE_APP_URL;
   }
-  saveJson(STORAGE_KEYS.settings, merged);
   return merged;
 }
 
-function loadDailyLogs() {
-  const savedLogs = loadJson(STORAGE_KEYS.dailyLogs, {});
+function loadDailyLogs(savedLogs = null) {
+  const rawLogs = savedLogs || loadJson(STORAGE_KEYS.dailyLogs, {});
   const hydrated = {};
-  Object.keys(savedLogs || {}).forEach((dateKey) => {
-    hydrated[dateKey] = hydrateDailyLog(dateKey, savedLogs[dateKey]);
+  Object.keys(rawLogs || {}).forEach((dateKey) => {
+    hydrated[dateKey] = hydrateDailyLog(dateKey, rawLogs[dateKey]);
   });
   return hydrated;
 }
 
-function persistSettings(showToastMessage = false) {
-  saveJson(STORAGE_KEYS.settings, state.settings);
-  if (showToastMessage) {
-    showToast("設定を保存しました");
+function loadAppState() {
+  const stored = loadJson(STORAGE_KEYS.appState, null);
+  if (stored && stored.dailyData) {
+    return {
+      settings: loadSettings(stored.settings || null),
+      dailyLogs: loadDailyLogs(stored.dailyData || {}),
+      appMeta: mergeWithDefaults(createDefaultAppMeta(), stored),
+    };
   }
+
+  return {
+    settings: loadSettings(),
+    dailyLogs: loadDailyLogs(),
+    appMeta: createDefaultAppMeta(),
+  };
+}
+
+function renderSaveStatus() {
+  const node = document.getElementById("save-status");
+  if (!node) {
+    return;
+  }
+  const status = state.saveState.status;
+  node.textContent = status === "saving" ? "保存中..." : status === "dirty" ? "未保存の変更あり" : status === "error" ? "保存失敗" : "保存済み";
+  node.classList.toggle("hidden", !state.bootUnlocked && state.activeScreen === "boot");
+  node.dataset.state = status;
+}
+
+function saveAppState(showToastMessage = false) {
+  try {
+    syncCarryOverReminders(getCurrentLog());
+    getCurrentLog().updatedAt = new Date().toISOString();
+    state.appMeta.version = APP_VERSION;
+    state.appMeta.lastActivePage = state.activeScreen;
+    state.appMeta.lastActiveDate = state.currentDateKey;
+    state.appMeta.lastOpenedAt = new Date().toISOString();
+    if (Object.values(getCurrentLog().morningRoutine).every(Boolean)) {
+      state.appMeta.morningCompletedDate = state.currentDateKey;
+    }
+
+    const payload = {
+      ...state.appMeta,
+      settings: state.settings,
+      dailyData: state.dailyLogs,
+    };
+
+    saveJson(STORAGE_KEYS.appState, payload);
+    saveJson(STORAGE_KEYS.settings, state.settings);
+    saveJson(STORAGE_KEYS.dailyLogs, state.dailyLogs);
+    state.saveState.status = "saved";
+    renderSaveStatus();
+    if (showToastMessage) {
+      showToast("保存しました");
+    }
+  } catch (error) {
+    console.error("save failed", error);
+    state.saveState.status = "error";
+    renderSaveStatus();
+  }
+}
+
+function scheduleAutoSave() {
+  state.saveState.status = "dirty";
+  renderSaveStatus();
+  clearTimeout(state.saveState.debounceTimer);
+  state.saveState.debounceTimer = window.setTimeout(() => {
+    state.saveState.status = "saving";
+    renderSaveStatus();
+    saveAppState(false);
+  }, 380);
+}
+
+function persistSettings(showToastMessage = false) {
+  saveAppState(showToastMessage);
+}
+
+function persistSettingsImmediate(showToastMessage = false) {
+  state.saveState.status = "saving";
+  renderSaveStatus();
+  saveAppState(showToastMessage);
+}
+
+function persistDailyLogs(showToastMessage = false) {
+  state.saveState.status = "saving";
+  renderSaveStatus();
+  saveAppState(showToastMessage);
+}
+
+function persistDailyLogsDeferred() {
+  scheduleAutoSave();
+}
+
+function saveCurrentPage(page = state.activeScreen) {
+  state.appMeta.lastActivePage = page;
+  state.appMeta.lastActiveDate = state.currentDateKey;
+  state.appMeta.lastOpenedAt = new Date().toISOString();
+  saveAppState(false);
+}
+
+function restoreLastPage() {
+  if (state.appMeta.lastActiveDate === state.currentDateKey && state.appMeta.lastActivePage) {
+    return state.appMeta.lastActivePage;
+  }
+  return "today";
 }
 
 function getCurrentLog() {
@@ -468,9 +795,9 @@ function getYesterdayLog() {
 
 function getDayOpsCollections(log = getCurrentLog()) {
   return [
-    { type: DAY_OPS_TYPES.contact, items: log.dayOps.contacts },
-    { type: DAY_OPS_TYPES.schedule121, items: log.dayOps.schedule121 },
-    { type: DAY_OPS_TYPES.task, items: log.dayOps.tasks },
+    { type: DAY_OPS_TYPES.contact, items: log.contactItems || [] },
+    { type: DAY_OPS_TYPES.schedule121, items: log.scheduleItems || [] },
+    { type: DAY_OPS_TYPES.task, items: log.taskItems || [] },
   ];
 }
 
@@ -478,18 +805,168 @@ function getAllDayOpsItems(log = getCurrentLog()) {
   return getDayOpsCollections(log).flatMap((entry) => entry.items);
 }
 
+function getTimelineSourceCollections(log = getCurrentLog()) {
+  return [
+    { type: "priority", items: log.topPriorities || [] },
+    { type: "timeline", items: log.timelineItems || [] },
+    { type: DAY_OPS_TYPES.contact, items: log.contactItems || [] },
+    { type: DAY_OPS_TYPES.schedule121, items: log.scheduleItems || [] },
+    { type: DAY_OPS_TYPES.task, items: log.taskItems || [] },
+  ];
+}
+
+function getAllActionItems(log = getCurrentLog()) {
+  const seen = new Set();
+  return [...(log.handoverItems || []), ...getTimelineSourceCollections(log).flatMap((entry) => entry.items)].filter((item) => {
+    if (!itemHasContent(item)) {
+      return false;
+    }
+    const key = item.sourceItemId ? `${item.id}:${item.sourceItemId}` : item.id;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function findActionItemById(id, log = getCurrentLog()) {
+  const items = getAllActionItems(log);
+  return items.find((item) => item.id === id) || items.find((item) => item.sourceItemId === id) || null;
+}
+
+function itemHasContent(item) {
+  if (!item) {
+    return false;
+  }
+  if (item.type === "contact" || item.type === "schedule") {
+    return Boolean(
+      String(item.contactPerson || "").trim() ||
+        String(item.title || "").trim() ||
+        String(item.description || "").trim() ||
+        String(item.memo || "").trim()
+    );
+  }
+  return Boolean(
+    String(item.title || "").trim() || String(item.description || "").trim() || String(item.memo || "").trim()
+  );
+}
+
+function isItemVisibleToday(item, dateKey = state.currentDateKey) {
+  if (!itemHasContent(item) || item.status === "deleted") {
+    return false;
+  }
+  if (item.postponedTo && item.postponedTo > dateKey) {
+    return false;
+  }
+  if (item.status === "postponed" && item.scheduledDate !== dateKey) {
+    return false;
+  }
+  return item.scheduledDate === dateKey;
+}
+
+function itemNeedsReschedule(item, dateKey = state.currentDateKey) {
+  return itemHasContent(item) && !item.completed && item.status !== "deleted" && item.status !== "done" && item.scheduledDate <= dateKey;
+}
+
+function getTimelineItems(dateKey = state.currentDateKey) {
+  const items = getTimelineSourceCollections(getCurrentLog())
+    .flatMap((entry) => entry.items)
+    .filter((item) => isItemVisibleToday(item, dateKey))
+    .filter((item) => String(item.startTime || "").trim())
+    .sort((left, right) => {
+      const leftStart = left.startTime || "99:99";
+      const rightStart = right.startTime || "99:99";
+      if (leftStart !== rightStart) {
+        return leftStart.localeCompare(rightStart);
+      }
+      const leftEnd = left.endTime || "99:99";
+      const rightEnd = right.endTime || "99:99";
+      if (leftEnd !== rightEnd) {
+        return leftEnd.localeCompare(rightEnd);
+      }
+      return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
+    });
+  return items;
+}
+
+function getUnscheduledTodayItems(dateKey = state.currentDateKey) {
+  return getTimelineSourceCollections(getCurrentLog())
+    .flatMap((entry) => entry.items)
+    .filter((item) => isItemVisibleToday(item, dateKey))
+    .filter((item) => !String(item.startTime || "").trim());
+}
+
+function getHandoverCandidates(dateKey = state.currentDateKey) {
+  return Object.keys(state.dailyLogs)
+    .filter((key) => key < dateKey)
+    .sort((a, b) => b.localeCompare(a))
+    .flatMap((key) => {
+      const log = state.dailyLogs[key];
+      const pool = [
+        ...(log.topPriorities || []),
+        ...(log.contactItems || []),
+        ...(log.scheduleItems || []),
+        ...(log.taskItems || []),
+        ...(log.timelineItems || []),
+      ];
+      return pool.filter((item) => itemNeedsReschedule(item, dateKey) && (item.scheduledDate <= dateKey || item.postponedTo === dateKey));
+    });
+}
+
+function ensureHandoverItems() {
+  const log = getCurrentLog();
+  const existingBySource = new Map((log.handoverItems || []).map((item) => [item.sourceItemId || item.id, item]));
+  const next = [];
+  getHandoverCandidates().forEach((item) => {
+    const existing = existingBySource.get(item.id);
+    if (existing && !existing.handoverResolved) {
+      next.push(
+        mergeWithDefaults(createDefaultTaskItem(existing.type || item.type), {
+          ...existing,
+          title: item.title,
+          description: item.description,
+          scheduledDate: item.scheduledDate,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          memo: item.memo,
+          priority: item.priority,
+          contactPerson: item.contactPerson,
+          contactTool: item.contactTool,
+          contactToolOther: item.contactToolOther,
+          candidateDates: item.candidateDates,
+          status: item.status,
+          completed: item.completed,
+        })
+      );
+      return;
+    }
+    next.push(
+      mergeWithDefaults(createDefaultTaskItem(item.type), {
+        ...item,
+        id: `handover-${item.id}`,
+        sourceItemId: item.id,
+        sourceType: item.type,
+        originDate: item.sourceDate || item.scheduledDate,
+        handoverResolved: false,
+      })
+    );
+  });
+  log.handoverItems = next;
+}
+
 function getCarryOverReminderText(item) {
-  if (item.type === DAY_OPS_TYPES.contact) {
-    return `連絡: ${item.name} / ${item.tool || "ツール未設定"} / ${item.requirement || "要件未設定"}`;
+  if (item.type === "contact") {
+    return `連絡: ${item.contactPerson || "相手未設定"} / ${item.contactTool || "ツール未設定"} / ${item.description || "内容未設定"}`;
   }
-  if (item.type === DAY_OPS_TYPES.schedule121) {
-    return `日程調整: ${item.name} / ${item.job || "仕事未設定"} / ${item.tool || "連絡手段未設定"}`;
+  if (item.type === "schedule") {
+    return `日程調整: ${item.contactPerson || "相手未設定"} / ${item.description || "内容未設定"} / ${item.contactTool || "連絡手段未設定"}`;
   }
-  return `タスク: ${item.title} / ${item.estimatedMinutes || "時間未設定"}分 / ${item.when || "未設定"}`;
+  return `タスク: ${item.title || "未設定"} / ${buildTimelineRange(item)} / ${item.memo || item.description || ""}`;
 }
 
 function syncCarryOverReminders(log = getCurrentLog()) {
-  const carryOverItems = getAllDayOpsItems(log).filter((item) => item.status === "carryOver");
+  const carryOverItems = getAllActionItems(log).filter((item) => item.status === "postponed");
   const desiredMap = new Map(
     carryOverItems.map((item) => [
       `${item.type}:${item.id}`,
@@ -531,45 +1008,8 @@ function syncCarryOverReminders(log = getCurrentLog()) {
   log.tomorrowReminder = reminders;
 }
 
-function persistDailyLogs(showToastMessage = false) {
-  const log = getCurrentLog();
-  syncCarryOverReminders(log);
-  log.updatedAt = new Date().toISOString();
-  saveJson(STORAGE_KEYS.dailyLogs, state.dailyLogs);
-  if (showToastMessage) {
-    showToast("保存しました");
-  }
-}
-
 function inheritCarryOverItems() {
-  const currentLog = getCurrentLog();
-  const yesterdayLog = getYesterdayLog();
-  if (!yesterdayLog) {
-    return;
-  }
-
-  getDayOpsCollections(yesterdayLog).forEach(({ type, items }) => {
-    const bucketName = DAY_OPS_TYPE_CONFIG[type].bucket;
-    const currentBucket = currentLog.dayOps[bucketName];
-    items
-      .filter((item) => item.status === "carryOver")
-      .forEach((item) => {
-        if (item.carriedForwardTo === currentLog.date || currentBucket.some((entry) => entry.id === item.id)) {
-          return;
-        }
-        currentBucket.push(
-          hydrateDayOpsItem(type, {
-            ...item,
-            status: "open",
-            carriedOverFrom: yesterdayLog.date,
-            carriedForwardTo: null,
-            completedAt: null,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        item.carriedForwardTo = currentLog.date;
-      });
-  });
+  return;
 }
 
 function ensureCurrentLog() {
@@ -579,7 +1019,8 @@ function ensureCurrentLog() {
   state.dailyLogs[state.currentDateKey] = hydrateDailyLog(state.currentDateKey, state.dailyLogs[state.currentDateKey]);
   inheritCarryOverItems();
   syncPrimaryMit(getCurrentLog());
-  persistDailyLogs(false);
+  ensureHandoverItems();
+  saveAppState(false);
 }
 
 function hydrateTimerFromLog() {
@@ -593,12 +1034,15 @@ function shouldShowBootOnLaunch() {
   if (!bootSettings.showOnLaunch) {
     return false;
   }
+  const missionDone = log.bootSequence.missionStatement.completed;
+  const timeMachineDone = !bootSettings.requireTimeMachine || log.bootSequence.timeMachine10m.completed;
+  if (missionDone && timeMachineDone) {
+    return false;
+  }
   if (bootSettings.showEveryOpen) {
     return true;
   }
-  const missionDone = log.bootSequence.missionStatement.completed;
-  const timeMachineDone = !bootSettings.requireTimeMachine || log.bootSequence.timeMachine10m.completed;
-  return !(missionDone && timeMachineDone);
+  return true;
 }
 
 function scrollToTop() {
@@ -619,16 +1063,19 @@ function initializeState() {
     history.scrollRestoration = "manual";
   }
 
-  state.settings = loadSettings();
-  state.dailyLogs = loadDailyLogs();
+  const loaded = loadAppState();
+  state.settings = loaded.settings;
+  state.dailyLogs = loaded.dailyLogs;
+  state.appMeta = loaded.appMeta;
   state.currentDateKey = getDateKey();
   ensureCurrentLog();
   ensureTaskUiState();
   state.selectedLogDate = state.currentDateKey;
   hydrateTimerFromLog();
   state.bootUnlocked = !shouldShowBootOnLaunch();
-  state.activeScreen = state.bootUnlocked ? "today" : "boot";
+  state.activeScreen = state.bootUnlocked ? restoreLastPage() : "boot";
   state.bootStep = "mission";
+  state.appMeta.lastOpenedAt = new Date().toISOString();
 }
 
 function showToast(message) {
@@ -642,11 +1089,11 @@ function showToast(message) {
 }
 
 function hasUnresolvedDayOps(log = getCurrentLog()) {
-  return getAllDayOpsItems(log).some((item) => item.status === "open");
+  return getAllActionItems(log).some((item) => itemNeedsReschedule(item));
 }
 
 function countUnresolvedDayOps(log = getCurrentLog()) {
-  return getAllDayOpsItems(log).filter((item) => item.status === "open").length;
+  return getAllActionItems(log).filter((item) => itemNeedsReschedule(item)).length;
 }
 
 function canEnterNight() {
@@ -656,7 +1103,7 @@ function canEnterNight() {
 function buildDefaultTaskSectionState(log = getCurrentLog()) {
   return Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
     const items = getDayOpsBucketByType(log, type);
-    accumulator[type] = items.some((item) => item.status === "open") || DEFAULT_TASK_SECTION_OPEN_STATE[type];
+    accumulator[type] = items.some((item) => itemNeedsReschedule(item)) || DEFAULT_TASK_SECTION_OPEN_STATE[type];
     return accumulator;
   }, {});
 }
@@ -673,7 +1120,9 @@ function ensureTaskUiState(log = getCurrentLog()) {
     task: false,
   };
   state.ui.reschedulingTaskId = null;
-  state.ui.reschedulingTaskValue = "";
+  state.ui.reschedulingTaskDate = "";
+  state.ui.reschedulingTaskStart = "";
+  state.ui.reschedulingTaskEnd = "";
 }
 
 function toggleTaskSection(type) {
@@ -692,97 +1141,141 @@ function toggleTaskForm(type) {
 }
 
 function resetTaskDraft() {
-  state.dayOpsDrafts.task = { title: "", goal: "", estimatedMinutes: "", when: "" };
+  state.dayOpsDrafts.task = {
+    scheduledDate: state.currentDateKey,
+    startTime: "",
+    endTime: "",
+    title: "",
+    description: "",
+    priority: "",
+    memo: "",
+  };
 }
 
 function startTaskReschedule(id) {
-  const item = getCurrentLog().dayOps.tasks.find((entry) => entry.id === id);
+  const item = findActionItemById(id);
   if (!item) {
     return;
   }
   state.ui.reschedulingTaskId = id;
-  state.ui.reschedulingTaskValue = item.when || "";
+  state.ui.reschedulingTaskDate = item.scheduledDate || state.currentDateKey;
+  state.ui.reschedulingTaskStart = item.startTime || "";
+  state.ui.reschedulingTaskEnd = item.endTime || "";
   state.ui.taskSections.task = true;
   renderDayOps();
 }
 
 function cancelTaskReschedule() {
   state.ui.reschedulingTaskId = null;
-  state.ui.reschedulingTaskValue = "";
+  state.ui.reschedulingTaskDate = "";
+  state.ui.reschedulingTaskStart = "";
+  state.ui.reschedulingTaskEnd = "";
   renderDayOps();
 }
 
 function saveTaskReschedule(id) {
-  const item = getCurrentLog().dayOps.tasks.find((entry) => entry.id === id);
+  const item = findActionItemById(id);
   if (!item) {
     return;
   }
-  item.when = state.ui.reschedulingTaskValue.trim();
+  item.scheduledDate = state.ui.reschedulingTaskDate || state.currentDateKey;
+  item.startTime = state.ui.reschedulingTaskStart || "";
+  item.endTime = state.ui.reschedulingTaskEnd || "";
+  item.postponedTo = item.scheduledDate > state.currentDateKey ? item.scheduledDate : null;
+  item.status = item.completed ? "done" : item.scheduledDate > state.currentDateKey ? "postponed" : "todo";
   item.updatedAt = new Date().toISOString();
+  if (item.sourceItemId) {
+    const source = findSourceItemById(item.sourceItemId);
+    if (source) {
+      source.scheduledDate = item.scheduledDate;
+      source.startTime = item.startTime;
+      source.endTime = item.endTime;
+      source.postponedTo = item.postponedTo;
+      source.status = item.status;
+      source.updatedAt = item.updatedAt;
+    }
+  }
   state.ui.reschedulingTaskId = null;
-  state.ui.reschedulingTaskValue = "";
+  state.ui.reschedulingTaskDate = "";
+  state.ui.reschedulingTaskStart = "";
+  state.ui.reschedulingTaskEnd = "";
   persistDailyLogs(true);
   renderDayOps();
 }
 
-function parseTimelineOrder(value) {
-  const text = String(value || "").trim();
-  const match = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) {
-    return { sortable: false, sortValue: Number.MAX_SAFE_INTEGER, label: text };
-  }
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) {
-    return { sortable: false, sortValue: Number.MAX_SAFE_INTEGER, label: text };
-  }
-  return { sortable: true, sortValue: hours * 60 + minutes, label: text };
-}
-
 function renderTaskTimeline() {
   const container = document.getElementById("task-timeline-list");
-  const timelineItems = getCurrentLog().dayOps.tasks
-    .filter((item) => item.status !== "done" && String(item.when || "").trim())
-    .map((item, index) => ({
-      item,
-      order: parseTimelineOrder(item.when),
-      index,
-    }))
-    .sort((left, right) => {
-      if (left.order.sortable && right.order.sortable) {
-        return left.order.sortValue - right.order.sortValue;
-      }
-      if (left.order.sortable) {
-        return -1;
-      }
-      if (right.order.sortable) {
-        return 1;
-      }
-      return left.index - right.index;
-    });
+  const unscheduled = document.getElementById("timeline-unscheduled-list");
+  const timelineItems = getTimelineItems();
+  const unscheduledItems = getUnscheduledTodayItems();
 
   if (!timelineItems.length) {
-    container.innerHTML = '<div class="dayops-empty">まだ時間指定のあるタスクはありません。</div>';
+    container.innerHTML = '<div class="dayops-empty">今日の時間付きタスクはまだありません。</div>';
+  } else {
+    container.innerHTML = timelineItems
+      .map(
+        (item) => `
+          <article class="timeline-item status-${getItemStatusClass(item)}">
+            <div class="timeline-time">${escapeHtml(buildTimelineRange(item))}</div>
+            <div class="timeline-card">
+              <div class="timeline-card-head">
+                <label class="inline-check">
+                  <input type="checkbox" data-item-complete="${item.id}" ${item.completed ? "checked" : ""} />
+                  <span class="toggle-indicator"></span>
+                </label>
+                <div class="timeline-card-main">
+                  <h4>${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+                  <p>${escapeHtml(getTimelineSubtitle(item))}</p>
+                </div>
+              </div>
+              <div class="dayops-item-meta">
+                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
+              </div>
+              <div class="dayops-actions">
+                <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
+                <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
+              </div>
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  if (!unscheduledItems.length) {
+    unscheduled.innerHTML = "";
     return;
   }
 
-  container.innerHTML = timelineItems
-    .map(
-      ({ item, order }) => `
-        <article class="timeline-item status-${item.status}">
-          <div class="timeline-time">${escapeHtml(order.label || "未設定")}</div>
-          <div class="timeline-card">
-            <h4>${escapeHtml(buildDayOpsTitle(item))}</h4>
-            <p>${escapeHtml(item.goal || "ゴール未設定")}</p>
-            <div class="dayops-item-meta">
-              <span class="status-badge status-${item.status}">${escapeHtml(getDayOpsStatusLabel(item.status))}</span>
-              ${item.estimatedMinutes ? `<span class="meta-chip">${escapeHtml(item.estimatedMinutes)}分</span>` : ""}
-            </div>
-          </div>
-        </article>
-      `
-    )
-    .join("");
+  unscheduled.innerHTML = `
+    <article class="card unscheduled-card">
+      <div class="section-heading">
+        <h3>時間未設定</h3>
+      </div>
+      <div class="dayops-list">
+        ${unscheduledItems
+          .map(
+            (item) => `
+              <article class="dayops-item status-${getItemStatusClass(item)}">
+                <div class="dayops-item-content">
+                  <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+                  <div class="dayops-item-meta">
+                    <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
+                    <span class="meta-chip">時間未設定</span>
+                  </div>
+                </div>
+                <div class="dayops-actions">
+                  <button class="secondary-button" data-item-reschedule="${item.id}" type="button">時間を決める</button>
+                  <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
 }
 
 function showScreen(screen) {
@@ -797,9 +1290,11 @@ function showScreen(screen) {
   }
 
   state.activeScreen = screen;
+  state.appMeta.lastActivePage = screen;
   renderScreenVisibility();
   renderFloatingProgressVisibility();
   renderSaveFabVisibility();
+  saveCurrentPage(screen);
   forceScrollTop();
 }
 
@@ -931,72 +1426,36 @@ function renderRoutineList(containerId, items, values, type, options = {}) {
 
 function renderTaskHandoffCard() {
   const handoff = document.getElementById("task-handoff-card");
-  const log = getCurrentLog();
-  const yesterdayLog = getYesterdayLog();
-  const carryOverGroups = getDayOpsCollections(log).map(({ type, items }) => ({
-    label: DAY_OPS_TYPE_CONFIG[type].label,
-    items: items.filter((item) => Boolean(item.carriedOverFrom)),
-  }));
-  const totalCarryOver = carryOverGroups.reduce((sum, entry) => sum + entry.items.length, 0);
-  const actionValue = yesterdayLog ? yesterdayLog.reflection.nextAction.trim() : "";
-  const reminderValues = yesterdayLog ? yesterdayLog.tomorrowReminder.map((item) => item.text.trim()).filter(Boolean) : [];
-  const contentBlocks = [];
-
-  if (actionValue) {
-    contentBlocks.push(`
-      <div class="task-handoff-block compact">
-        <strong>今日のアクション</strong>
-        <p>${escapeHtml(actionValue)}</p>
-      </div>
-    `);
+  const items = (getCurrentLog().handoverItems || []).filter((item) => !item.handoverResolved && itemNeedsReschedule(item));
+  if (!items.length) {
+    handoff.innerHTML = '<div class="task-handoff-empty">昨日から引き継ぐものはありません。</div>';
+    return;
   }
 
-  if (reminderValues.length) {
-    contentBlocks.push(`
-      <div class="task-handoff-block compact">
-        <strong>昨日のリマインド</strong>
-        <div class="task-handoff-chip-row">
-          ${reminderValues.map((value) => `<span class="meta-chip">${escapeHtml(value)}</span>`).join("")}
-        </div>
-      </div>
-    `);
-  }
-
-  if (totalCarryOver) {
-    contentBlocks.push(`
-      <div class="task-handoff-block compact carryover">
-        <div class="task-handoff-head">
-          <strong>持ち越しタスク</strong>
-          <span class="meta-chip has-items">${totalCarryOver}件</span>
-        </div>
-        <div class="task-handoff-chip-row">
-          ${carryOverGroups
-            .filter((entry) => entry.items.length)
-            .map(
-              (entry) => `
-                <span class="meta-chip has-items">
-                  ${escapeHtml(entry.label)} ${entry.items.length}件
-                </span>
-              `
-            )
-            .join("")}
-        </div>
-        <div class="task-handoff-list">
-          ${carryOverGroups
-            .flatMap((entry) =>
-              entry.items.map(
-                (item) => `<p><span>${escapeHtml(entry.label)}</span>${escapeHtml(buildDayOpsTitle(item))}</p>`
-              )
-            )
-            .join("")}
-        </div>
-      </div>
-    `);
-  }
-
-  handoff.innerHTML = contentBlocks.length
-    ? contentBlocks.join("")
-    : '<div class="task-handoff-empty">昨日から引き継ぐものはありません。</div>';
+  handoff.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dayops-item status-${getItemStatusClass(item)}">
+          <div class="dayops-item-header">
+            <div class="dayops-item-content">
+              <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+              <div class="dayops-item-meta">
+                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
+                <span class="meta-chip">元日付: ${escapeHtml(item.originDate || item.sourceDate || "")}</span>
+                <span class="meta-chip">${escapeHtml(buildTimelineRange(item))}</span>
+              </div>
+              <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
+            </div>
+          </div>
+          <div class="dayops-actions">
+            <button class="subtle-button" data-item-complete-button="${item.id}" type="button">${item.completed ? "未完了に戻す" : "完了"}</button>
+            <button class="secondary-button" data-handover-activate="${item.id}" type="button">今日やる</button>
+            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">再延期</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderReminders() {
@@ -1029,12 +1488,12 @@ function renderReminders() {
 function calculateProgress() {
   const log = getCurrentLog();
   const gratitudeDone = Object.values(log.gratitude).every((value) => value.trim());
-  const dayOpsItems = getAllDayOpsItems(log);
-  const dayOpsDone = dayOpsItems.filter((item) => item.status !== "open").length;
+  const dayOpsItems = getAllActionItems(log);
+  const dayOpsDone = dayOpsItems.filter((item) => item.completed || item.status === "done" || item.status === "postponed").length;
   const achieved = [
     log.bootSequence.missionStatement.completed && (!state.settings.bootSequence.requireTimeMachine || log.bootSequence.timeMachine10m.completed),
     ...MORNING_ROUTINE_ITEMS.map((item) => log.morningRoutine[item.key]),
-    ...Object.values(log.mit).map(Boolean),
+    ...(log.topPriorities || []).map((item) => Boolean(item.title)),
     ...NIGHT_ROUTINE_ITEMS.map((item) => log.nightRoutine[item.key]),
     Boolean(log.reflection.fbLearning.trim()),
     Boolean(log.reflection.nextAction.trim()),
@@ -1082,9 +1541,25 @@ function renderToday() {
   syncPrimaryMit(log);
   document.getElementById("today-title").textContent = formatMorningHeaderDate(state.currentDateKey);
   document.getElementById("week-goal").value = log.weekGoal;
-  document.getElementById("mit1").value = log.mit.mit1;
-  document.getElementById("mit2").value = log.mit.mit2;
-  document.getElementById("mit3").value = log.mit.mit3;
+  (log.topPriorities || []).forEach((item, index) => {
+    const order = index + 1;
+    const title = document.getElementById(`priority-${order}-title`);
+    const start = document.getElementById(`priority-${order}-start`);
+    const end = document.getElementById(`priority-${order}-end`);
+    const memo = document.getElementById(`priority-${order}-memo`);
+    if (title) {
+      title.value = item.title || "";
+    }
+    if (start) {
+      start.value = item.startTime || "";
+    }
+    if (end) {
+      end.value = item.endTime || "";
+    }
+    if (memo) {
+      memo.value = item.memo || "";
+    }
+  });
   renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
     collapseCompleted: true,
   });
@@ -1094,30 +1569,48 @@ function renderToday() {
 function renderTaskFocusList() {
   const log = getCurrentLog();
   const container = document.getElementById("task-focus-list");
-  const mitEntries = [log.mit.mit1, log.mit.mit2, log.mit.mit3];
-  container.innerHTML = mitEntries
+  const priorities = (log.topPriorities || []).filter((item) => itemHasContent(item));
+  if (!priorities.length) {
+    container.innerHTML = '<div class="dayops-empty">今日の最重要はまだ未設定です。</div>';
+    return;
+  }
+  container.innerHTML = priorities
     .map(
-      (entry, index) => `
-        <div class="task-focus-item">
-          <span class="task-focus-index">${index + 1}</span>
-          <p>${escapeHtml(entry || "未設定")}</p>
-        </div>
+      (item, index) => `
+        <article class="task-focus-item status-${getItemStatusClass(item)}">
+          <label class="inline-check">
+            <input type="checkbox" data-item-complete="${item.id}" ${item.completed ? "checked" : ""} />
+            <span class="toggle-indicator"></span>
+          </label>
+          <div class="task-focus-copy">
+            <div class="task-focus-head">
+              <span class="task-focus-index">${index + 1}</span>
+              <strong>${escapeHtml(item.title || "未設定")}</strong>
+            </div>
+            <p>${escapeHtml(buildTimelineRange(item))}${item.memo ? ` / ${escapeHtml(item.memo)}` : ""}</p>
+          </div>
+          <div class="dayops-actions">
+            <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
+            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
+          </div>
+        </article>
       `
     )
     .join("");
 }
 
 function renderTaskSection(type, items) {
+  const visibleItems = items.filter((item) => item.status !== "deleted");
   const article = document.getElementById(`task-section-${type}`);
   const body = document.getElementById(`task-section-body-${type}`);
   const summary = document.getElementById(`task-section-summary-${type}`);
   const formPanel = document.getElementById(`${type}-form-panel`);
   const formActions = document.getElementById(`${type}-form-actions`);
   const toggleButton = article.querySelector(`[data-task-form-toggle="${type}"]`);
-  const unresolvedCount = items.filter((item) => item.status === "open").length;
+  const unresolvedCount = visibleItems.filter((item) => itemNeedsReschedule(item)).length;
   const sectionOpen = Boolean(state.ui.taskSections[type]);
   const formOpen = Boolean(state.ui.taskForms[type]);
-  article.classList.toggle("has-items", items.length > 0);
+  article.classList.toggle("has-items", visibleItems.length > 0);
   article.classList.toggle("has-unresolved", unresolvedCount > 0);
   article.classList.toggle("is-open", sectionOpen);
   body.classList.toggle("hidden", !sectionOpen);
@@ -1127,7 +1620,7 @@ function renderTaskSection(type, items) {
     toggleButton.textContent = formOpen ? "入力を閉じる" : "+ 追加する";
   }
   summary.innerHTML = [
-    items.length ? `<span class="task-summary-pill has-items">${items.length}件</span>` : "",
+    visibleItems.length ? `<span class="task-summary-pill has-items">${visibleItems.length}件</span>` : "",
     unresolvedCount ? `<span class="task-summary-pill is-alert">未整理${unresolvedCount}</span>` : "",
   ]
     .filter(Boolean)
@@ -1135,89 +1628,150 @@ function renderTaskSection(type, items) {
   summary.classList.toggle("is-empty", !items.length && !unresolvedCount);
 }
 
-function getDayOpsStatusLabel(status) {
-  if (status === "done") {
+function getTaskStatusLabel(item) {
+  if (item.completed || item.status === "done") {
     return "完了";
   }
-  if (status === "carryOver") {
+  if (item.status === "doing") {
+    return "実行中";
+  }
+  if (item.status === "pending") {
+    return "保留";
+  }
+  if (item.status === "postponed") {
     return "明日に回す";
   }
-  return "未整理";
+  return "未着手";
+}
+
+function getDayOpsStatusLabel(status) {
+  return getTaskStatusLabel({ status, completed: status === "done" });
+}
+
+function getItemStatusClass(item) {
+  if (item.completed || item.status === "done") {
+    return "done";
+  }
+  if (item.status === "postponed") {
+    return "carryOver";
+  }
+  return "open";
+}
+
+function getTaskTypeLabel(item) {
+  if (item.type === "priority") {
+    return "最重要";
+  }
+  if (item.type === "contact") {
+    return "連絡";
+  }
+  if (item.type === "schedule") {
+    return "日程調整";
+  }
+  if (item.type === "timeline") {
+    return "タイムライン";
+  }
+  return "タスク";
+}
+
+function buildTimelineRange(item) {
+  if (item.startTime && item.endTime) {
+    return `${item.startTime} - ${item.endTime}`;
+  }
+  if (item.startTime) {
+    return item.startTime;
+  }
+  return "時間未設定";
+}
+
+function getTimelineSubtitle(item) {
+  if (item.type === "contact") {
+    return [item.contactPerson, item.description, item.contactTool === "その他" ? item.contactToolOther : item.contactTool].filter(Boolean).join(" / ");
+  }
+  if (item.type === "schedule") {
+    return [item.contactPerson, item.description, (item.candidateDates || []).join(" / ")].filter(Boolean).join(" / ");
+  }
+  return [item.description, item.memo].filter(Boolean).join(" / ");
 }
 
 function buildDayOpsMeta(item) {
-  if (item.type === DAY_OPS_TYPES.contact) {
+  if (item.type === "contact") {
     return [
-      item.tool ? `ツール: ${item.tool}` : "",
-      item.requirement ? `要件: ${item.requirement}` : "",
-      item.carriedOverFrom ? `前日: ${item.carriedOverFrom}` : "",
+      item.startTime ? `開始: ${item.startTime}` : "",
+      item.endTime ? `終了: ${item.endTime}` : "",
+      item.contactTool ? `ツール: ${item.contactTool === "その他" ? item.contactToolOther || "その他" : item.contactTool}` : "",
     ].filter(Boolean);
   }
-  if (item.type === DAY_OPS_TYPES.schedule121) {
+  if (item.type === "schedule") {
     return [
-      item.job ? `仕事: ${item.job}` : "",
-      item.tool ? `ツール: ${item.tool}` : "",
-      item.carriedOverFrom ? `前日: ${item.carriedOverFrom}` : "",
+      item.startTime ? `開始: ${item.startTime}` : "",
+      item.endTime ? `終了: ${item.endTime}` : "",
+      item.contactTool ? `ツール: ${item.contactTool === "その他" ? item.contactToolOther || "その他" : item.contactTool}` : "",
     ].filter(Boolean);
   }
   return [
-    item.goal ? `ゴール: ${item.goal}` : "",
-    item.estimatedMinutes ? `${item.estimatedMinutes}分` : "",
-    item.when ? `いつ: ${item.when}` : "",
-    item.carriedOverFrom ? `前日: ${item.carriedOverFrom}` : "",
+    item.startTime ? `開始: ${item.startTime}` : "",
+    item.endTime ? `終了: ${item.endTime}` : "",
+    item.priority ? `優先度: ${item.priority}` : "",
+    item.description ? item.description : "",
   ].filter(Boolean);
 }
 
 function buildDayOpsTitle(item) {
-  if (item.type === DAY_OPS_TYPES.contact) {
-    return item.name || "名前未入力";
+  if (item.type === "contact" || item.type === "schedule") {
+    return item.contactPerson || item.title || "名前未入力";
   }
-  if (item.type === DAY_OPS_TYPES.schedule121) {
-    return item.name || "名前未入力";
-  }
-  return item.title || "作業未入力";
+  return item.title || "未設定";
 }
 
 function renderDayOpsList(containerId, items, type) {
   const container = document.getElementById(containerId);
-  if (!items.length) {
+  const visibleItems = items.filter((item) => item.status !== "deleted");
+  if (!visibleItems.length) {
     container.innerHTML = '<div class="dayops-empty">まだ項目はありません。</div>';
     return;
   }
 
-  container.innerHTML = items
+  container.innerHTML = visibleItems
     .map((item) => {
       const meta = buildDayOpsMeta(item);
-      const isOpen = item.status === "open";
-      const isDone = item.status === "done";
-      const isCarryOver = item.status === "carryOver";
+      const isDone = item.completed || item.status === "done";
       const isRescheduling = state.ui.reschedulingTaskId === item.id;
       return `
-        <article class="dayops-item status-${item.status}">
+        <article class="dayops-item status-${getItemStatusClass(item)}">
           <div class="dayops-item-header">
             <div class="dayops-item-content">
               <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
+              <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
               <div class="dayops-item-meta">
-                <span class="status-badge status-${item.status}">${escapeHtml(getDayOpsStatusLabel(item.status))}</span>
+                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
                 ${meta.map((entry) => `<span class="meta-chip">${escapeHtml(entry)}</span>`).join("")}
               </div>
             </div>
           </div>
           <div class="dayops-actions">
-            <button class="subtle-button ${isDone ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:done" data-status-action="done" type="button">完了</button>
-            <button class="subtle-button ${isCarryOver ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:carryOver" data-status-action="carryOver" type="button">明日に回す</button>
-            <button class="subtle-button ${isOpen ? "is-active" : ""}" data-dayops-status="${type}:${item.id}:reset" data-status-action="reset" type="button" ${isOpen ? "disabled" : ""}>戻す</button>
+            <button class="subtle-button ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">${isDone ? "未完了に戻す" : "完了"}</button>
+            <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
+            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
             <button class="ghost-button danger-button" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
           </div>
           ${
-            type === DAY_OPS_TYPES.task && isRescheduling
+            isRescheduling
               ? `<div class="task-reschedule-panel">
                   <label>
-                    <span>いつやる</span>
-                    <input type="text" data-task-reschedule-input="${item.id}" value="${escapeHtml(
-                      state.ui.reschedulingTaskValue
-                    )}" placeholder="明日 10:00 / 営業前 / 移動中" />
+                    <span>日付</span>
+                    <input type="date" data-task-reschedule-date="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskDate)}" />
                   </label>
+                  <div class="priority-editor-times">
+                    <label>
+                      <span>開始</span>
+                      <input type="time" data-task-reschedule-start="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskStart)}" />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input type="time" data-task-reschedule-end="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskEnd)}" />
+                    </label>
+                  </div>
                   <div class="action-row compact-row">
                     <button class="secondary-button" data-task-reschedule-save="${item.id}" type="button">保存</button>
                     <button class="ghost-button" data-task-reschedule-cancel type="button">キャンセル</button>
@@ -1235,31 +1789,53 @@ function renderDayOps() {
   const log = getCurrentLog();
   ensureTaskUiState(log);
   syncPrimaryMit(log);
+  ensureHandoverItems();
+  document.getElementById("contact-date").value = state.dayOpsDrafts.contact.scheduledDate || state.currentDateKey;
+  document.getElementById("contact-start").value = state.dayOpsDrafts.contact.startTime;
+  document.getElementById("contact-end").value = state.dayOpsDrafts.contact.endTime;
   document.getElementById("contact-name").value = state.dayOpsDrafts.contact.name;
-  document.getElementById("contact-tool").value = state.dayOpsDrafts.contact.tool;
   document.getElementById("contact-requirement").value = state.dayOpsDrafts.contact.requirement;
+  document.getElementById("contact-tool").value = state.dayOpsDrafts.contact.contactTool;
+  document.getElementById("contact-tool-other").value = state.dayOpsDrafts.contact.contactToolOther;
+  document.getElementById("contact-memo").value = state.dayOpsDrafts.contact.memo;
+  document.getElementById("schedule-date").value = state.dayOpsDrafts.schedule121.scheduledDate || state.currentDateKey;
+  document.getElementById("schedule-start").value = state.dayOpsDrafts.schedule121.startTime;
+  document.getElementById("schedule-end").value = state.dayOpsDrafts.schedule121.endTime;
   document.getElementById("schedule-name").value = state.dayOpsDrafts.schedule121.name;
   document.getElementById("schedule-job").value = state.dayOpsDrafts.schedule121.job;
-  document.getElementById("schedule-tool").value = state.dayOpsDrafts.schedule121.tool;
+  document.getElementById("schedule-tool").value = state.dayOpsDrafts.schedule121.contactTool;
+  document.getElementById("schedule-tool-other").value = state.dayOpsDrafts.schedule121.contactToolOther;
+  document.getElementById("schedule-candidate-dates").value = state.dayOpsDrafts.schedule121.candidateDatesText;
+  document.getElementById("schedule-memo").value = state.dayOpsDrafts.schedule121.memo;
+  document.getElementById("task-date").value = state.dayOpsDrafts.task.scheduledDate || state.currentDateKey;
+  document.getElementById("task-start").value = state.dayOpsDrafts.task.startTime;
+  document.getElementById("task-end").value = state.dayOpsDrafts.task.endTime;
   document.getElementById("task-title").value = state.dayOpsDrafts.task.title;
-  document.getElementById("task-goal").value = state.dayOpsDrafts.task.goal;
-  document.getElementById("task-estimated-minutes").value = state.dayOpsDrafts.task.estimatedMinutes;
-  document.getElementById("task-when").value = state.dayOpsDrafts.task.when;
+  document.getElementById("task-goal").value = state.dayOpsDrafts.task.description;
+  document.getElementById("task-priority").value = state.dayOpsDrafts.task.priority;
+  document.getElementById("task-memo").value = state.dayOpsDrafts.task.memo;
   document.getElementById("expense-memo").value = log.dayOps.expenseMemo;
   document.getElementById("task-form-submit-button").textContent = "タスクを追加";
+  document.getElementById("global-reschedule-date").value = state.ui.reschedulingTaskDate || state.currentDateKey;
+  document.getElementById("global-reschedule-start").value = state.ui.reschedulingTaskStart;
+  document.getElementById("global-reschedule-end").value = state.ui.reschedulingTaskEnd;
+  document.getElementById("global-reschedule-panel").classList.toggle("hidden", !state.ui.reschedulingTaskId);
 
   renderTaskHandoffCard();
   renderTaskFocusList();
-  renderDayOpsList("contact-list", log.dayOps.contacts, DAY_OPS_TYPES.contact);
-  renderDayOpsList("schedule121-list", log.dayOps.schedule121, DAY_OPS_TYPES.schedule121);
-  renderDayOpsList("task-list", log.dayOps.tasks, DAY_OPS_TYPES.task);
+  renderDayOpsList("contact-list", log.contactItems, DAY_OPS_TYPES.contact);
+  renderDayOpsList("schedule121-list", log.scheduleItems, DAY_OPS_TYPES.schedule121);
+  renderDayOpsList("task-list", log.taskItems, DAY_OPS_TYPES.task);
   renderTaskTimeline();
-  renderTaskSection(DAY_OPS_TYPES.contact, log.dayOps.contacts);
-  renderTaskSection(DAY_OPS_TYPES.schedule121, log.dayOps.schedule121);
-  renderTaskSection(DAY_OPS_TYPES.task, log.dayOps.tasks);
+  renderTaskSection(DAY_OPS_TYPES.contact, log.contactItems);
+  renderTaskSection(DAY_OPS_TYPES.schedule121, log.scheduleItems);
+  renderTaskSection(DAY_OPS_TYPES.task, log.taskItems);
+  toggleToolOtherVisibility("contact", state.dayOpsDrafts.contact.contactTool);
+  toggleToolOtherVisibility("schedule121", state.dayOpsDrafts.schedule121.contactTool);
 
   const unresolved = countUnresolvedDayOps(log);
-  document.getElementById("dayops-status-note").textContent = unresolved ? `未整理 ${unresolved} 件` : "未整理 0 件";
+  document.getElementById("dayops-status-note").textContent = unresolved ? `未整理 ${unresolved} 件` : "";
+  document.getElementById("dayops-status-note").classList.toggle("hidden", unresolved === 0);
   document.getElementById("dayops-status-note").classList.toggle("is-alert", unresolved > 0);
   document.getElementById("dayops-next-button").disabled = unresolved > 0;
   updateProgressUi();
@@ -1284,7 +1860,7 @@ function formatDayOpsPreview(items) {
     return "なし";
   }
   return items
-    .map((item) => `${buildDayOpsTitle(item)} (${getDayOpsStatusLabel(item.status)})`)
+    .map((item) => `${buildDayOpsTitle(item)} (${getTaskStatusLabel(item)})`)
     .join(" / ");
 }
 
@@ -1318,16 +1894,14 @@ function renderLogs() {
       <p>10m Time Machine: ${log.bootSequence.timeMachine10m.completed ? "完了" : "未完了"}</p>
     </div>
     <div class="log-detail-block">
-      <strong>今日の最重要3つ</strong>
-      <p>${escapeHtml(log.mit.mit1 || "未入力")}</p>
-      <p>${escapeHtml(log.mit.mit2 || "未入力")}</p>
-      <p>${escapeHtml(log.mit.mit3 || "未入力")}</p>
+      <strong>今日の最重要</strong>
+      ${(log.topPriorities || []).map((item) => `<p>${escapeHtml(item.title || "未入力")} / ${escapeHtml(buildTimelineRange(item))}</p>`).join("")}
     </div>
     <div class="log-detail-block">
       <strong>タスク</strong>
-      <p>連絡: ${escapeHtml(formatDayOpsPreview(log.dayOps.contacts))}</p>
-      <p>日程調整: ${escapeHtml(formatDayOpsPreview(log.dayOps.schedule121))}</p>
-      <p>タスク: ${escapeHtml(formatDayOpsPreview(log.dayOps.tasks))}</p>
+      <p>連絡: ${escapeHtml(formatDayOpsPreview(log.contactItems || []))}</p>
+      <p>日程調整: ${escapeHtml(formatDayOpsPreview(log.scheduleItems || []))}</p>
+      <p>タスク: ${escapeHtml(formatDayOpsPreview(log.taskItems || []))}</p>
       <p>メモ: ${escapeHtml(log.dayOps.expenseMemo || "未入力")}</p>
     </div>
     <div class="log-detail-block">
@@ -1402,6 +1976,7 @@ function renderScreenVisibility() {
     button.classList.toggle("active", button.dataset.screen === state.activeScreen);
   });
   renderFloatingTimerVisibility();
+  renderSaveStatus();
 }
 
 function renderApp() {
@@ -1417,6 +1992,7 @@ function renderApp() {
   renderOutputPanel();
   renderFloatingProgressVisibility();
   renderSaveFabVisibility();
+  renderSaveStatus();
 }
 
 function openOutput(title, kicker, content) {
@@ -1436,7 +2012,7 @@ function formatMarkdownDayOps(items, formatter) {
   if (!items.length) {
     return ["- なし"];
   }
-  return items.map((item) => `- [${item.status === "open" ? " " : "x"}] ${formatter(item)} (${getDayOpsStatusLabel(item.status)})`);
+  return items.map((item) => `- [${item.completed ? "x" : " "}] ${formatter(item)} (${getTaskStatusLabel(item)})`);
 }
 
 function buildMarkdown(log) {
@@ -1469,19 +2045,19 @@ function buildMarkdown(log) {
     "## 朝ルーティン",
     ...MORNING_ROUTINE_ITEMS.map((item) => `- [${mark(log.morningRoutine[item.key])}] ${item.label}`),
     "",
-    "## 今日の最重要3つ",
-    `- [${mark(log.mit.mit1)}] 最重要1: ${log.mit.mit1}`,
-    `- [${mark(log.mit.mit2)}] 最重要2: ${log.mit.mit2}`,
-    `- [${mark(log.mit.mit3)}] 最重要3: ${log.mit.mit3}`,
+    "## 今日の最重要",
+    ...(log.topPriorities || []).map(
+      (item, index) => `- [${mark(item.completed)}] ${index + 1}: ${item.title} / ${buildTimelineRange(item)} / ${item.memo || ""}`
+    ),
     "",
     "## タスク / 連絡",
-    ...formatMarkdownDayOps(log.dayOps.contacts, (item) => `${item.name} / ${item.tool} / ${item.requirement}`),
+    ...formatMarkdownDayOps(log.contactItems || [], (item) => `${item.contactPerson} / ${item.contactTool || item.contactToolOther || ""} / ${item.description}`),
     "",
     "## タスク / 日程調整",
-    ...formatMarkdownDayOps(log.dayOps.schedule121, (item) => `${item.name} / ${item.job} / ${item.tool}`),
+    ...formatMarkdownDayOps(log.scheduleItems || [], (item) => `${item.contactPerson} / ${item.description} / ${(item.candidateDates || []).join(" / ")}`),
     "",
     "## タスク / 作業タスク",
-    ...formatMarkdownDayOps(log.dayOps.tasks, (item) => `${item.title} / ${item.goal} / ${item.estimatedMinutes}分 / ${item.when}`),
+    ...formatMarkdownDayOps(log.taskItems || [], (item) => `${item.title} / ${item.description} / ${buildTimelineRange(item)}`),
     "",
     "## メモ",
     `- ${log.dayOps.expenseMemo}`,
@@ -1619,12 +2195,6 @@ function updateCurrentLogField(id, value) {
     case "week-goal":
       log.weekGoal = value;
       break;
-    case "mit2":
-      log.mit.mit2 = value;
-      break;
-    case "mit3":
-      log.mit.mit3 = value;
-      break;
     case "expense-memo":
       log.dayOps.expenseMemo = value;
       break;
@@ -1652,7 +2222,7 @@ function updateCurrentLogField(id, value) {
     default:
       return false;
   }
-  persistDailyLogs(false);
+  persistDailyLogsDeferred();
   updateProgressUi();
   return true;
 }
@@ -1677,7 +2247,7 @@ function openRoutineLink(type, key) {
   const log = getCurrentLog();
   const bucket = type === "morning" ? log.morningRoutine : log.nightRoutine;
   bucket[key] = true;
-  persistDailyLogs(false);
+  persistDailyLogs(true);
   if (type === "morning") {
     renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
       collapseCompleted: true,
@@ -1704,50 +2274,85 @@ function addDayOpsItem(type) {
     if (!draft.name.trim() && !draft.requirement.trim()) {
       return;
     }
-    log.dayOps.contacts.push(
+    log.contactItems.push(
       createDefaultDayOpsItem(type, {
-        name: draft.name.trim(),
-        tool: draft.tool.trim(),
-        requirement: draft.requirement.trim(),
+        contactPerson: draft.name.trim(),
+        title: draft.requirement.trim() || draft.name.trim(),
+        description: draft.requirement.trim(),
+        scheduledDate: draft.scheduledDate || state.currentDateKey,
+        startTime: draft.startTime || "",
+        endTime: draft.endTime || "",
+        contactTool: draft.contactTool || "",
+        contactToolOther: draft.contactToolOther || "",
+        memo: draft.memo.trim(),
         sourceDate: log.date,
         createdAt: now,
         updatedAt: now,
       })
     );
-    state.dayOpsDrafts.contact = { name: "", tool: "", requirement: "" };
+    state.dayOpsDrafts.contact = {
+      scheduledDate: state.currentDateKey,
+      startTime: "",
+      endTime: "",
+      name: "",
+      requirement: "",
+      contactTool: "",
+      contactToolOther: "",
+      memo: "",
+    };
   } else if (type === DAY_OPS_TYPES.schedule121) {
     const draft = state.dayOpsDrafts.schedule121;
     if (!draft.name.trim()) {
       return;
     }
-    log.dayOps.schedule121.push(
+    log.scheduleItems.push(
       createDefaultDayOpsItem(type, {
-        name: draft.name.trim(),
-        job: draft.job.trim(),
-        tool: draft.tool.trim(),
+        contactPerson: draft.name.trim(),
+        title: draft.job.trim() || draft.name.trim(),
+        description: draft.job.trim(),
+        scheduledDate: draft.scheduledDate || state.currentDateKey,
+        startTime: draft.startTime || "",
+        endTime: draft.endTime || "",
+        contactTool: draft.contactTool || "",
+        contactToolOther: draft.contactToolOther || "",
+        candidateDates: String(draft.candidateDatesText || "")
+          .split("/")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        memo: draft.memo.trim(),
         sourceDate: log.date,
         createdAt: now,
         updatedAt: now,
       })
     );
-    state.dayOpsDrafts.schedule121 = { name: "", job: "", tool: "" };
+    state.dayOpsDrafts.schedule121 = {
+      scheduledDate: state.currentDateKey,
+      startTime: "",
+      endTime: "",
+      name: "",
+      job: "",
+      contactTool: "",
+      contactToolOther: "",
+      candidateDatesText: "",
+      memo: "",
+    };
   } else {
     const draft = state.dayOpsDrafts.task;
     if (!draft.title.trim()) {
       return;
     }
-    const nextTaskValues = {
-      title: draft.title.trim(),
-      goal: draft.goal.trim(),
-      estimatedMinutes: draft.estimatedMinutes ? String(draft.estimatedMinutes).trim() : "",
-      when: draft.when.trim(),
-      sourceDate: log.date,
-      updatedAt: now,
-    };
-    log.dayOps.tasks.push(
+    log.taskItems.push(
       createDefaultDayOpsItem(type, {
-        ...nextTaskValues,
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        memo: draft.memo.trim(),
+        priority: draft.priority || null,
+        scheduledDate: draft.scheduledDate || state.currentDateKey,
+        startTime: draft.startTime || "",
+        endTime: draft.endTime || "",
+        sourceDate: log.date,
         createdAt: now,
+        updatedAt: now,
       })
     );
     resetTaskDraft();
@@ -1760,41 +2365,179 @@ function addDayOpsItem(type) {
 }
 
 function getDayOpsBucketByType(log, type) {
-  const bucketName = DAY_OPS_TYPE_CONFIG[type].bucket;
-  return log.dayOps[bucketName];
+  if (type === DAY_OPS_TYPES.contact) {
+    return log.contactItems;
+  }
+  if (type === DAY_OPS_TYPES.schedule121) {
+    return log.scheduleItems;
+  }
+  return log.taskItems;
 }
 
-function updateDayOpsStatus(type, id, status) {
-  const bucket = getDayOpsBucketByType(getCurrentLog(), type);
-  const item = bucket.find((entry) => entry.id === id);
+function findItemById(id, log = getCurrentLog()) {
+  const pools = [
+    ...(log.topPriorities || []),
+    ...(log.handoverItems || []),
+    ...(log.timelineItems || []),
+    ...(log.contactItems || []),
+    ...(log.scheduleItems || []),
+    ...(log.taskItems || []),
+  ];
+  return pools.find((item) => item.id === id) || pools.find((item) => item.sourceItemId === id) || null;
+}
+
+function findSourceItemById(sourceId) {
+  if (!sourceId) {
+    return null;
+  }
+  const logs = Object.values(state.dailyLogs);
+  for (const log of logs) {
+    const pools = [
+      ...(log.topPriorities || []),
+      ...(log.timelineItems || []),
+      ...(log.contactItems || []),
+      ...(log.scheduleItems || []),
+      ...(log.taskItems || []),
+    ];
+    const found = pools.find((item) => item.id === sourceId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function toggleToolOtherVisibility(type, value) {
+  const wrapId = type === "contact" ? "contact-tool-other-wrap" : "schedule-tool-other-wrap";
+  const wrap = document.getElementById(wrapId);
+  if (wrap) {
+    wrap.classList.toggle("hidden", value !== "その他");
+  }
+}
+
+function markItemCompleted(id, checked) {
+  const item = findItemById(id);
   if (!item) {
     return;
   }
-  item.status = status === "reset" ? "open" : status;
+  item.completed = checked;
+  item.status = checked ? "done" : "todo";
   item.updatedAt = new Date().toISOString();
-  item.completedAt = item.status === "done" ? item.updatedAt : null;
-  if (item.status !== "carryOver") {
-    item.carriedForwardTo = null;
-    if (type === DAY_OPS_TYPES.task && state.ui.reschedulingTaskId === id) {
-      state.ui.reschedulingTaskId = null;
-      state.ui.reschedulingTaskValue = "";
+  if (item.sourceItemId) {
+    const source = findSourceItemById(item.sourceItemId);
+    if (source) {
+      source.completed = checked;
+      source.status = checked ? "done" : "todo";
+      source.updatedAt = item.updatedAt;
+    }
+    item.handoverResolved = checked;
+  }
+  persistDailyLogs(false);
+  renderDayOps();
+  renderNight();
+}
+
+function postponeItemToTomorrow(id) {
+  const item = findItemById(id);
+  if (!item) {
+    return;
+  }
+  const date = new Date(`${state.currentDateKey}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  const tomorrow = getDateKey(date);
+  item.postponedFrom = state.currentDateKey;
+  item.postponedTo = tomorrow;
+  item.scheduledDate = tomorrow;
+  item.status = "postponed";
+  item.completed = false;
+  item.updatedAt = new Date().toISOString();
+  if (item.sourceItemId) {
+    const source = findSourceItemById(item.sourceItemId);
+    if (source) {
+      source.postponedFrom = state.currentDateKey;
+      source.postponedTo = tomorrow;
+      source.scheduledDate = tomorrow;
+      source.status = "postponed";
+      source.completed = false;
+      source.updatedAt = item.updatedAt;
     }
   }
-  if (type === DAY_OPS_TYPES.task && item.status === "carryOver") {
-    state.ui.reschedulingTaskId = id;
-    state.ui.reschedulingTaskValue = item.when || "";
+  if (item.id.startsWith("handover-")) {
+    item.handoverResolved = true;
   }
   persistDailyLogs(true);
   renderDayOps();
   renderNight();
 }
 
+function activateHandoverItem(id) {
+  const handoverItem = (getCurrentLog().handoverItems || []).find((item) => item.id === id);
+  if (!handoverItem) {
+    return;
+  }
+  const targetType =
+    handoverItem.sourceType === "contact"
+      ? DAY_OPS_TYPES.contact
+      : handoverItem.sourceType === "schedule"
+        ? DAY_OPS_TYPES.schedule121
+        : DAY_OPS_TYPES.task;
+  const bucket = getDayOpsBucketByType(getCurrentLog(), targetType);
+  const existing = bucket.find((item) => item.sourceItemId === handoverItem.sourceItemId || item.id === handoverItem.sourceItemId);
+  if (existing) {
+    existing.scheduledDate = state.currentDateKey;
+    existing.postponedTo = null;
+    existing.status = "todo";
+    existing.updatedAt = new Date().toISOString();
+  } else {
+    bucket.push(
+      mergeWithDefaults(createDefaultDayOpsItem(targetType), {
+        ...handoverItem,
+        id: handoverItem.sourceItemId || handoverItem.id,
+        type: handoverItem.sourceType || handoverItem.type,
+        scheduledDate: state.currentDateKey,
+        postponedTo: null,
+        status: "todo",
+        completed: false,
+      })
+    );
+  }
+  const source = findSourceItemById(handoverItem.sourceItemId);
+  if (source) {
+    source.scheduledDate = state.currentDateKey;
+    source.postponedTo = null;
+    source.status = "todo";
+    source.completed = false;
+    source.updatedAt = new Date().toISOString();
+  }
+  handoverItem.handoverResolved = true;
+  persistDailyLogs(true);
+  renderDayOps();
+}
+
+function updateDayOpsStatus(type, id, status) {
+  if (status === "done") {
+    markItemCompleted(id, true);
+    return;
+  }
+  if (status === "carryOver") {
+    postponeItemToTomorrow(id);
+    return;
+  }
+  markItemCompleted(id, false);
+}
+
 function deleteDayOpsItem(type, id) {
-  const bucketName = DAY_OPS_TYPE_CONFIG[type].bucket;
-  getCurrentLog().dayOps[bucketName] = getCurrentLog().dayOps[bucketName].filter((item) => item.id !== id);
-  if (type === DAY_OPS_TYPES.task && state.ui.reschedulingTaskId === id) {
+  const bucket = getDayOpsBucketByType(getCurrentLog(), type);
+  const item = bucket.find((entry) => entry.id === id);
+  if (item) {
+    item.status = "deleted";
+    item.updatedAt = new Date().toISOString();
+  }
+  if (state.ui.reschedulingTaskId === id) {
     state.ui.reschedulingTaskId = null;
-    state.ui.reschedulingTaskValue = "";
+    state.ui.reschedulingTaskDate = "";
+    state.ui.reschedulingTaskStart = "";
+    state.ui.reschedulingTaskEnd = "";
   }
   persistDailyLogs(true);
   renderDayOps();
@@ -1836,7 +2579,7 @@ function handleClick(event) {
 
   if (target.id === "floating-save-button") {
     if (state.activeScreen === "settings") {
-      persistSettings(true);
+      persistSettingsImmediate(true);
     } else {
       persistDailyLogs(true);
     }
@@ -1897,6 +2640,37 @@ function handleClick(event) {
     return;
   }
 
+  if (target.dataset.itemCompleteButton) {
+    const item = findItemById(target.dataset.itemCompleteButton);
+    markItemCompleted(target.dataset.itemCompleteButton, !(item && item.completed));
+    return;
+  }
+
+  if (target.dataset.itemPostpone) {
+    postponeItemToTomorrow(target.dataset.itemPostpone);
+    return;
+  }
+
+  if (target.dataset.itemReschedule) {
+    startTaskReschedule(target.dataset.itemReschedule);
+    return;
+  }
+
+  if (target.dataset.handoverActivate) {
+    activateHandoverItem(target.dataset.handoverActivate);
+    return;
+  }
+
+  if (target.id === "global-reschedule-save" && state.ui.reschedulingTaskId) {
+    saveTaskReschedule(state.ui.reschedulingTaskId);
+    return;
+  }
+
+  if (target.id === "global-reschedule-cancel") {
+    cancelTaskReschedule();
+    return;
+  }
+
   if (target.dataset.taskRescheduleSave) {
     saveTaskReschedule(target.dataset.taskRescheduleSave);
     return;
@@ -1945,7 +2719,7 @@ function handleChange(event) {
   if (target.id === "mission-readaloud") {
     log.bootSequence.missionStatement.readAloud = target.checked;
     updateMissionCompletion();
-    persistDailyLogs(false);
+    persistDailyLogs(true);
     renderBootState();
     return;
   }
@@ -1953,7 +2727,7 @@ function handleChange(event) {
   if (target.id === "mission-principles") {
     log.bootSequence.missionStatement.liveByPrinciples = target.checked;
     updateMissionCompletion();
-    persistDailyLogs(false);
+    persistDailyLogs(true);
     renderBootState();
     return;
   }
@@ -1961,7 +2735,7 @@ function handleChange(event) {
   if (target.id === "tm-visualized") {
     log.bootSequence.timeMachine10m.visualizedFuture = target.checked;
     updateTimeMachineCompletion();
-    persistDailyLogs(false);
+    persistDailyLogs(true);
     renderBootState();
     return;
   }
@@ -1969,7 +2743,7 @@ function handleChange(event) {
   if (target.id === "tm-action-visible") {
     log.bootSequence.timeMachine10m.actionVisible = target.checked;
     updateTimeMachineCompletion();
-    persistDailyLogs(false);
+    persistDailyLogs(true);
     renderBootState();
     return;
   }
@@ -1977,7 +2751,10 @@ function handleChange(event) {
   if (target.dataset.routineType) {
     const bucket = target.dataset.routineType === "morning" ? log.morningRoutine : log.nightRoutine;
     bucket[target.dataset.routineKey] = target.checked;
-    persistDailyLogs(false);
+    if (target.dataset.routineType === "morning" && Object.values(log.morningRoutine).every(Boolean)) {
+      state.appMeta.morningCompletedDate = state.currentDateKey;
+    }
+    persistDailyLogs(true);
     toggleCheckedClass(target);
     if (target.dataset.routineType === "morning") {
       renderRoutineList("morning-routine-list", MORNING_ROUTINE_ITEMS, log.morningRoutine, "morning", {
@@ -1992,15 +2769,34 @@ function handleChange(event) {
     const reminder = log.tomorrowReminder.find((item) => item.id === target.dataset.reminderToggle);
     if (reminder) {
       reminder.completed = target.checked;
-      persistDailyLogs(false);
+      persistDailyLogs(true);
       renderNight();
     }
     return;
   }
 
+  if (target.dataset.itemComplete) {
+    markItemCompleted(target.dataset.itemComplete, target.checked);
+    return;
+  }
+
+  if (target.id === "contact-tool") {
+    state.dayOpsDrafts.contact.contactTool = target.value;
+    toggleToolOtherVisibility("contact", target.value);
+    persistDailyLogsDeferred();
+    return;
+  }
+
+  if (target.id === "schedule-tool") {
+    state.dayOpsDrafts.schedule121.contactTool = target.value;
+    toggleToolOtherVisibility("schedule121", target.value);
+    persistDailyLogsDeferred();
+    return;
+  }
+
   if (target.dataset.settingsBoot) {
     state.settings.bootSequence[target.dataset.settingsBoot] = target.checked;
-    persistSettings(false);
+    persistSettingsImmediate(false);
     toggleCheckedClass(target);
     return;
   }
@@ -2013,24 +2809,69 @@ function handleInput(event) {
     return;
   }
 
+  const priorityMatch = target.id.match(/^priority-(\d+)-(title|start|end|memo)$/);
+  if (priorityMatch) {
+    const item = getCurrentLog().topPriorities[Number(priorityMatch[1]) - 1];
+    if (item) {
+      const fieldMap = {
+        title: "title",
+        start: "startTime",
+        end: "endTime",
+        memo: "memo",
+      };
+      item[fieldMap[priorityMatch[2]]] = target.value;
+      if (Number(priorityMatch[1]) === 2) {
+        getCurrentLog().mit.mit2 = getCurrentLog().topPriorities[1].title;
+      }
+      if (Number(priorityMatch[1]) === 3) {
+        getCurrentLog().mit.mit3 = getCurrentLog().topPriorities[2].title;
+      }
+      persistDailyLogsDeferred();
+    }
+    return;
+  }
+
   if (target.dataset.timeMachineField) {
     getCurrentLog().bootSequence.timeMachine10m.futureVision[target.dataset.timeMachineField] = target.value;
     if (target.dataset.timeMachineField === "todayActionFromFuture") {
       syncPrimaryMit(getCurrentLog());
-      document.getElementById("mit1").value = getCurrentLog().mit.mit1;
+      document.getElementById("priority-1-title").value = getCurrentLog().topPriorities[0].title;
     }
-    persistDailyLogs(false);
+    persistDailyLogsDeferred();
     return;
   }
 
   if (target.dataset.dayopsDraft) {
     const [type, field] = target.dataset.dayopsDraft.split(":");
     state.dayOpsDrafts[type][field] = target.value;
+    if (type === "contact" && field === "contactTool") {
+      toggleToolOtherVisibility("contact", target.value);
+    }
+    if (type === "contact" && field === "contactToolOther") {
+      toggleToolOtherVisibility("contact", state.dayOpsDrafts.contact.contactTool);
+    }
+    if (field === "contactTool" && type === "schedule121") {
+      toggleToolOtherVisibility("schedule121", target.value);
+    }
+    if (field === "contactToolOther" && type === "schedule121") {
+      toggleToolOtherVisibility("schedule121", state.dayOpsDrafts.schedule121.contactTool);
+    }
+    persistDailyLogsDeferred();
     return;
   }
 
-  if (target.dataset.taskRescheduleInput) {
-    state.ui.reschedulingTaskValue = target.value;
+  if (target.dataset.taskRescheduleDate) {
+    state.ui.reschedulingTaskDate = target.value;
+    return;
+  }
+
+  if (target.dataset.taskRescheduleStart) {
+    state.ui.reschedulingTaskStart = target.value;
+    return;
+  }
+
+  if (target.dataset.taskRescheduleEnd) {
+    state.ui.reschedulingTaskEnd = target.value;
     return;
   }
 
@@ -2038,21 +2879,21 @@ function handleInput(event) {
     const reminder = getCurrentLog().tomorrowReminder.find((item) => item.id === target.dataset.reminderText);
     if (reminder) {
       reminder.text = target.value;
-      persistDailyLogs(false);
+      persistDailyLogsDeferred();
     }
     return;
   }
 
   if (target.dataset.settingsMission) {
     state.settings.missionStatement[target.dataset.settingsMission] = target.value;
-    persistSettings(false);
+    persistSettingsImmediate(false);
     renderMissionCards();
     return;
   }
 
   if (target.dataset.settingsLink) {
     state.settings.links[target.dataset.settingsLink] = target.value;
-    persistSettings(false);
+    scheduleAutoSave();
   }
 }
 
@@ -2060,11 +2901,20 @@ function handleScroll() {
   renderFloatingProgressVisibility();
 }
 
+function handleVisibilitySave() {
+  if (document.visibilityState === "hidden") {
+    saveAppState(false);
+  }
+}
+
 function attachListeners() {
   document.addEventListener("click", handleClick);
   document.addEventListener("change", handleChange);
   document.addEventListener("input", handleInput);
   window.addEventListener("scroll", handleScroll, { passive: true });
+  window.addEventListener("beforeunload", () => saveAppState(false));
+  window.addEventListener("pagehide", () => saveAppState(false));
+  document.addEventListener("visibilitychange", handleVisibilitySave);
 }
 
 function boot() {

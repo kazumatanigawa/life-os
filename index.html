@@ -124,21 +124,81 @@
 
             <article class="card morning-card span-two">
               <div class="section-heading">
-                <h3>今日の最重要3つ</h3>
+                <h3>今日の最重要</h3>
               </div>
-              <div class="stack-fields triple-fields">
-                <label>
-                  <span>最重要1</span>
-                  <input id="mit1" type="text" placeholder="未来から自動反映" readonly />
-                </label>
-                <label>
-                  <span>最重要2</span>
-                  <input id="mit2" type="text" placeholder="重要タスク 2" />
-                </label>
-                <label>
-                  <span>最重要3</span>
-                  <input id="mit3" type="text" placeholder="重要タスク 3" />
-                </label>
+              <div class="priority-editor-list" id="priority-editor-list">
+                <article class="priority-editor-card">
+                  <div class="priority-editor-head">
+                    <strong>1</strong>
+                    <span>未来から自動反映</span>
+                  </div>
+                  <label>
+                    <span>タスク名</span>
+                    <input id="priority-1-title" type="text" placeholder="未来から自動反映" readonly />
+                  </label>
+                  <div class="priority-editor-times">
+                    <label>
+                      <span>開始</span>
+                      <input id="priority-1-start" type="time" />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input id="priority-1-end" type="time" />
+                    </label>
+                  </div>
+                  <label>
+                    <span>メモ</span>
+                    <input id="priority-1-memo" type="text" placeholder="補足メモ" />
+                  </label>
+                </article>
+                <article class="priority-editor-card">
+                  <div class="priority-editor-head">
+                    <strong>2</strong>
+                    <span>当日決める</span>
+                  </div>
+                  <label>
+                    <span>タスク名</span>
+                    <input id="priority-2-title" type="text" placeholder="重要タスク 2" />
+                  </label>
+                  <div class="priority-editor-times">
+                    <label>
+                      <span>開始</span>
+                      <input id="priority-2-start" type="time" />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input id="priority-2-end" type="time" />
+                    </label>
+                  </div>
+                  <label>
+                    <span>メモ</span>
+                    <input id="priority-2-memo" type="text" placeholder="補足メモ" />
+                  </label>
+                </article>
+                <article class="priority-editor-card">
+                  <div class="priority-editor-head">
+                    <strong>3</strong>
+                    <span>当日決める</span>
+                  </div>
+                  <label>
+                    <span>タスク名</span>
+                    <input id="priority-3-title" type="text" placeholder="重要タスク 3" />
+                  </label>
+                  <div class="priority-editor-times">
+                    <label>
+                      <span>開始</span>
+                      <input id="priority-3-start" type="time" />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input id="priority-3-end" type="time" />
+                    </label>
+                  </div>
+                  <label>
+                    <span>メモ</span>
+                    <input id="priority-3-memo" type="text" placeholder="補足メモ" />
+                  </label>
+                </article>
               </div>
             </article>
           </div>
@@ -159,12 +219,17 @@
 
             <article class="card span-two">
               <div class="section-heading">
-                <h3>今日の最重要3つ</h3>
+                <h3>今日の最重要</h3>
               </div>
               <div class="task-focus-list" id="task-focus-list"></div>
-              <div class="action-row compact-row">
-                <button class="ghost-button task-focus-edit-button" data-screen="today" type="button">Morningで編集</button>
+            </article>
+
+            <article class="card span-two timeline-section-card">
+              <div class="section-heading">
+                <h3>今日のタイムライン</h3>
               </div>
+              <div class="timeline-list" id="task-timeline-list"></div>
+              <div class="timeline-unscheduled-list" id="timeline-unscheduled-list"></div>
             </article>
 
             <article class="card span-two task-section" id="task-section-contact">
@@ -182,21 +247,44 @@
                 </div>
                 <div class="dayops-form-grid contact-form hidden" id="contact-form-panel">
                   <label>
+                    <span>予定日</span>
+                    <input id="contact-date" data-dayops-draft="contact:scheduledDate" type="date" />
+                  </label>
+                  <label>
+                    <span>開始</span>
+                    <input id="contact-start" data-dayops-draft="contact:startTime" type="time" />
+                  </label>
+                  <label>
+                    <span>終了</span>
+                    <input id="contact-end" data-dayops-draft="contact:endTime" type="time" />
+                  </label>
+                  <label>
                     <span>名前</span>
                     <input id="contact-name" data-dayops-draft="contact:name" type="text" placeholder="相手の名前" />
                   </label>
+                  <label class="span-two">
+                    <span>内容</span>
+                    <input id="contact-requirement" data-dayops-draft="contact:requirement" type="text" placeholder="何を送るか" />
+                  </label>
                   <label>
-                    <span>ツール</span>
-                    <input
-                      id="contact-tool"
-                      data-dayops-draft="contact:tool"
-                      type="text"
-                      placeholder="LINE / FB / Instagram / 電話"
-                    />
+                    <span>連絡ツール</span>
+                    <select id="contact-tool" data-dayops-draft="contact:contactTool">
+                      <option value="">未選択</option>
+                      <option value="LINE">LINE</option>
+                      <option value="FB">FB</option>
+                      <option value="Instagram">Instagram</option>
+                      <option value="電話">電話</option>
+                      <option value="直接">直接</option>
+                      <option value="その他">その他</option>
+                    </select>
+                  </label>
+                  <label class="hidden" id="contact-tool-other-wrap">
+                    <span>その他ツール</span>
+                    <input id="contact-tool-other" data-dayops-draft="contact:contactToolOther" type="text" placeholder="連絡ツールを入力" />
                   </label>
                   <label class="span-two">
-                    <span>要件</span>
-                    <input id="contact-requirement" data-dayops-draft="contact:requirement" type="text" placeholder="何を送るか" />
+                    <span>メモ</span>
+                    <input id="contact-memo" data-dayops-draft="contact:memo" type="text" placeholder="補足メモ" />
                   </label>
                 </div>
                 <div class="action-row compact-row hidden" id="contact-form-actions">
@@ -220,6 +308,18 @@
                 </div>
                 <div class="dayops-form-grid schedule-form hidden" id="schedule121-form-panel">
                   <label>
+                    <span>予定日</span>
+                    <input id="schedule-date" data-dayops-draft="schedule121:scheduledDate" type="date" />
+                  </label>
+                  <label>
+                    <span>開始</span>
+                    <input id="schedule-start" data-dayops-draft="schedule121:startTime" type="time" />
+                  </label>
+                  <label>
+                    <span>終了</span>
+                    <input id="schedule-end" data-dayops-draft="schedule121:endTime" type="time" />
+                  </label>
+                  <label>
                     <span>名前</span>
                     <input id="schedule-name" data-dayops-draft="schedule121:name" type="text" placeholder="相手の名前" />
                   </label>
@@ -227,9 +327,29 @@
                     <span>その人の仕事</span>
                     <input id="schedule-job" data-dayops-draft="schedule121:job" type="text" placeholder="職業・肩書き" />
                   </label>
-                  <label class="span-two">
+                  <label>
                     <span>連絡ツール</span>
-                    <input id="schedule-tool" data-dayops-draft="schedule121:tool" type="text" placeholder="LINE / FB / Instagram" />
+                    <select id="schedule-tool" data-dayops-draft="schedule121:contactTool">
+                      <option value="">未選択</option>
+                      <option value="LINE">LINE</option>
+                      <option value="FB">FB</option>
+                      <option value="Instagram">Instagram</option>
+                      <option value="電話">電話</option>
+                      <option value="直接">直接</option>
+                      <option value="その他">その他</option>
+                    </select>
+                  </label>
+                  <label class="hidden" id="schedule-tool-other-wrap">
+                    <span>その他ツール</span>
+                    <input id="schedule-tool-other" data-dayops-draft="schedule121:contactToolOther" type="text" placeholder="連絡ツールを入力" />
+                  </label>
+                  <label class="span-two">
+                    <span>候補日</span>
+                    <input id="schedule-candidate-dates" data-dayops-draft="schedule121:candidateDatesText" type="text" placeholder="候補日を / 区切りで入力" />
+                  </label>
+                  <label class="span-two">
+                    <span>メモ</span>
+                    <input id="schedule-memo" data-dayops-draft="schedule121:memo" type="text" placeholder="補足メモ" />
                   </label>
                 </div>
                 <div class="action-row compact-row hidden" id="schedule121-form-actions">
@@ -253,20 +373,37 @@
                 </div>
                 <div class="dayops-form-grid task-form hidden" id="task-form-panel">
                   <label>
+                    <span>予定日</span>
+                    <input id="task-date" data-dayops-draft="task:scheduledDate" type="date" />
+                  </label>
+                  <label>
+                    <span>開始</span>
+                    <input id="task-start" data-dayops-draft="task:startTime" type="time" />
+                  </label>
+                  <label>
+                    <span>終了</span>
+                    <input id="task-end" data-dayops-draft="task:endTime" type="time" />
+                  </label>
+                  <label>
                     <span>作業</span>
                     <input id="task-title" data-dayops-draft="task:title" type="text" placeholder="やる作業" />
                   </label>
                   <label>
-                    <span>ゴール</span>
-                    <input id="task-goal" data-dayops-draft="task:goal" type="text" placeholder="完了条件" />
+                    <span>優先度</span>
+                    <select id="task-priority" data-dayops-draft="task:priority">
+                      <option value="">未選択</option>
+                      <option value="high">高</option>
+                      <option value="middle">中</option>
+                      <option value="low">低</option>
+                    </select>
                   </label>
-                  <label>
-                    <span>何分かかるか</span>
-                    <input id="task-estimated-minutes" data-dayops-draft="task:estimatedMinutes" type="number" min="1" inputmode="numeric" placeholder="15" />
+                  <label class="span-two">
+                    <span>説明 / ゴール</span>
+                    <input id="task-goal" data-dayops-draft="task:description" type="text" placeholder="完了条件・説明" />
                   </label>
-                  <label>
-                    <span>いつやるか</span>
-                    <input id="task-when" data-dayops-draft="task:when" type="text" placeholder="14:30 / 営業後 / 移動中" />
+                  <label class="span-two">
+                    <span>メモ</span>
+                    <input id="task-memo" data-dayops-draft="task:memo" type="text" placeholder="補足メモ" />
                   </label>
                 </div>
                 <div class="action-row compact-row hidden" id="task-form-actions">
@@ -277,16 +414,33 @@
 
             <article class="card span-two">
               <div class="section-heading">
-                <h3>タイムライン</h3>
-              </div>
-              <div class="timeline-list" id="task-timeline-list"></div>
-            </article>
-
-            <article class="card span-two">
-              <div class="section-heading">
                 <h3>メモ</h3>
               </div>
               <textarea id="expense-memo" rows="7" placeholder="支出や気づいたことを雑にメモしておく"></textarea>
+            </article>
+
+            <article class="card span-two hidden" id="global-reschedule-panel">
+              <div class="section-heading">
+                <h3>日時の再設定</h3>
+              </div>
+              <div class="dayops-form-grid">
+                <label>
+                  <span>日付</span>
+                  <input id="global-reschedule-date" type="date" data-task-reschedule-date="global" />
+                </label>
+                <label>
+                  <span>開始</span>
+                  <input id="global-reschedule-start" type="time" data-task-reschedule-start="global" />
+                </label>
+                <label>
+                  <span>終了</span>
+                  <input id="global-reschedule-end" type="time" data-task-reschedule-end="global" />
+                </label>
+              </div>
+              <div class="action-row compact-row">
+                <button class="secondary-button" id="global-reschedule-save" type="button">保存</button>
+                <button class="ghost-button" id="global-reschedule-cancel" type="button">キャンセル</button>
+              </div>
             </article>
           </div>
 
@@ -467,6 +621,7 @@
       </nav>
     </div>
 
+    <div class="save-status-pill hidden" id="save-status">保存済み</div>
     <button class="save-fab hidden" id="floating-save-button" type="button">保存する</button>
     <div class="toast hidden" id="toast"></div>
 
