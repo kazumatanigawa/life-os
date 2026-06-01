@@ -16,6 +16,8 @@ const DAY_OPS_TYPES = {
   task: "task",
 };
 
+const TASK_TIMELINE_SECTION = "timeline";
+
 const CONTACT_TOOL_OPTIONS = ["LINE", "FB", "Instagram", "電話", "直接", "その他"];
 
 const DAY_OPS_TYPE_CONFIG = {
@@ -37,6 +39,7 @@ const DEFAULT_TASK_SECTION_OPEN_STATE = {
   [DAY_OPS_TYPES.contact]: true,
   [DAY_OPS_TYPES.schedule121]: true,
   [DAY_OPS_TYPES.task]: true,
+  [TASK_TIMELINE_SECTION]: true,
 };
 
 const MISSION_SECTIONS = [
@@ -1193,11 +1196,13 @@ function canEnterNight() {
 }
 
 function buildDefaultTaskSectionState(log = getCurrentLog()) {
-  return Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
+  const next = Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
     const items = getDayOpsBucketByType(log, type);
     accumulator[type] = items.some((item) => itemNeedsReschedule(item)) || DEFAULT_TASK_SECTION_OPEN_STATE[type];
     return accumulator;
   }, {});
+  next[TASK_TIMELINE_SECTION] = DEFAULT_TASK_SECTION_OPEN_STATE[TASK_TIMELINE_SECTION];
+  return next;
 }
 
 function ensureTaskUiState(log = getCurrentLog()) {
@@ -1751,6 +1756,29 @@ function renderTaskSection(type, items) {
   summary.classList.toggle("is-empty", !items.length && !unresolvedCount);
 }
 
+function renderTimelineSection() {
+  const article = document.getElementById("task-section-timeline");
+  const body = document.getElementById("task-section-body-timeline");
+  const summary = document.getElementById("task-section-summary-timeline");
+  if (!article || !body || !summary) {
+    return;
+  }
+  const timelineItems = getTimelineItems();
+  const unscheduledItems = getUnscheduledTodayItems();
+  const sectionOpen = Boolean(state.ui.taskSections[TASK_TIMELINE_SECTION]);
+  const importantCount = timelineItems.filter((item) => item.isImportantToday).length + unscheduledItems.filter((item) => item.isImportantToday).length;
+  article.classList.toggle("has-items", timelineItems.length + unscheduledItems.length > 0);
+  article.classList.toggle("is-open", sectionOpen);
+  body.classList.toggle("hidden", !sectionOpen);
+  summary.innerHTML = [
+    timelineItems.length + unscheduledItems.length ? `<span class="task-summary-pill has-items">${timelineItems.length + unscheduledItems.length}件</span>` : "",
+    importantCount ? `<span class="task-summary-pill has-items">最重要${importantCount}</span>` : "",
+  ]
+    .filter(Boolean)
+    .join("");
+  summary.classList.toggle("is-empty", timelineItems.length + unscheduledItems.length === 0);
+}
+
 function getTaskStatusLabel(item) {
   if (item.completed || item.status === "done") {
     return "完了";
@@ -2029,6 +2057,7 @@ function renderDayOps() {
   renderTaskSection(DAY_OPS_TYPES.contact, log.contactItems);
   renderTaskSection(DAY_OPS_TYPES.schedule121, log.scheduleItems);
   renderTaskSection(DAY_OPS_TYPES.task, log.taskItems);
+  renderTimelineSection();
   renderCompletedTaskList();
   toggleToolOtherVisibility("contact", state.dayOpsDrafts.contact.contactTool);
   toggleToolOtherVisibility("schedule121", state.dayOpsDrafts.schedule121.contactTool);

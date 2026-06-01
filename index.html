@@ -398,12 +398,18 @@
               </div>
             </article>
 
-            <article class="card span-two">
-              <div class="section-heading">
-                <h3>今日のタイムライン</h3>
+            <article class="card span-two task-section" id="task-section-timeline">
+              <button class="task-section-header" data-task-section-toggle="timeline" type="button">
+                <div>
+                  <h3>今日のタイムライン</h3>
+                </div>
+                <div class="task-section-summary" id="task-section-summary-timeline"></div>
+                <span class="task-section-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="task-section-body" id="task-section-body-timeline">
+                <div class="timeline-list" id="task-timeline-list"></div>
+                <div class="timeline-unscheduled-list" id="timeline-unscheduled-list"></div>
               </div>
-              <div class="timeline-list" id="task-timeline-list"></div>
-              <div class="timeline-unscheduled-list" id="timeline-unscheduled-list"></div>
             </article>
 
             <article class="card span-two">
