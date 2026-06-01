@@ -34,8 +34,8 @@ const DAY_OPS_TYPE_CONFIG = {
 };
 
 const DEFAULT_TASK_SECTION_OPEN_STATE = {
-  [DAY_OPS_TYPES.contact]: false,
-  [DAY_OPS_TYPES.schedule121]: false,
+  [DAY_OPS_TYPES.contact]: true,
+  [DAY_OPS_TYPES.schedule121]: true,
   [DAY_OPS_TYPES.task]: true,
 };
 
