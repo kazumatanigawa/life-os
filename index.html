@@ -224,14 +224,6 @@
               <div class="task-focus-list" id="task-focus-list"></div>
             </article>
 
-            <article class="card span-two timeline-section-card">
-              <div class="section-heading">
-                <h3>今日のタイムライン</h3>
-              </div>
-              <div class="timeline-list" id="task-timeline-list"></div>
-              <div class="timeline-unscheduled-list" id="timeline-unscheduled-list"></div>
-            </article>
-
             <article class="card span-two task-section" id="task-section-contact">
               <button class="task-section-header" data-task-section-toggle="contact" type="button">
                 <div>
@@ -381,8 +373,8 @@
                     <input id="task-start" data-dayops-draft="task:startTime" type="time" />
                   </label>
                   <label>
-                    <span>終了</span>
-                    <input id="task-end" data-dayops-draft="task:endTime" type="time" />
+                    <span>所要時間(分)</span>
+                    <input id="task-duration" data-dayops-draft="task:durationMinutes" type="number" min="1" inputmode="numeric" placeholder="90" />
                   </label>
                   <label>
                     <span>作業</span>
@@ -414,6 +406,14 @@
 
             <article class="card span-two">
               <div class="section-heading">
+                <h3>今日のタイムライン</h3>
+              </div>
+              <div class="timeline-list" id="task-timeline-list"></div>
+              <div class="timeline-unscheduled-list" id="timeline-unscheduled-list"></div>
+            </article>
+
+            <article class="card span-two">
+              <div class="section-heading">
                 <h3>メモ</h3>
               </div>
               <textarea id="expense-memo" rows="7" placeholder="支出や気づいたことを雑にメモしておく"></textarea>
@@ -433,8 +433,8 @@
                   <input id="global-reschedule-start" type="time" data-task-reschedule-start="global" />
                 </label>
                 <label>
-                  <span>終了</span>
-                  <input id="global-reschedule-end" type="time" data-task-reschedule-end="global" />
+                  <span>所要時間(分)</span>
+                  <input id="global-reschedule-duration" type="number" min="1" inputmode="numeric" data-task-reschedule-duration="global" />
                 </label>
               </div>
               <div class="action-row compact-row">

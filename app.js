@@ -153,6 +153,7 @@ const state = {
       scheduledDate: "",
       startTime: "",
       endTime: "",
+      durationMinutes: "",
       name: "",
       requirement: "",
       contactTool: "",
@@ -163,6 +164,7 @@ const state = {
       scheduledDate: "",
       startTime: "",
       endTime: "",
+      durationMinutes: "",
       name: "",
       job: "",
       contactTool: "",
@@ -173,7 +175,7 @@ const state = {
     task: {
       scheduledDate: "",
       startTime: "",
-      endTime: "",
+      durationMinutes: "",
       title: "",
       description: "",
       priority: "",
@@ -191,7 +193,7 @@ const state = {
     reschedulingTaskId: null,
     reschedulingTaskDate: "",
     reschedulingTaskStart: "",
-    reschedulingTaskEnd: "",
+    reschedulingTaskDuration: "",
   },
   saveState: {
     status: "saved",
@@ -234,6 +236,7 @@ function createDefaultTaskItem(type, overrides = {}) {
     scheduledDate: state.currentDateKey || getDateKey(),
     startTime: "",
     endTime: "",
+    durationMinutes: null,
     completed: false,
     status: "todo",
     postponedFrom: null,
@@ -417,6 +420,68 @@ function parseLegacyWhen(value) {
   return { startTime: "", endTime: "" };
 }
 
+function parseTimeToMinutes(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{1,2}:\d{2}$/.test(text)) {
+    return null;
+  }
+  const [hours, minutes] = text.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatMinutesToTime(totalMinutes) {
+  if (!Number.isFinite(totalMinutes) || totalMinutes < 0) {
+    return "";
+  }
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function computeDurationMinutes(startTime, endTime) {
+  const start = parseTimeToMinutes(startTime);
+  const end = parseTimeToMinutes(endTime);
+  if (start === null || end === null || end <= start) {
+    return null;
+  }
+  return end - start;
+}
+
+function computeEndTime(startTime, durationMinutes) {
+  const start = parseTimeToMinutes(startTime);
+  const duration = Number(durationMinutes);
+  if (start === null || !Number.isFinite(duration) || duration <= 0) {
+    return "";
+  }
+  return formatMinutesToTime(start + duration);
+}
+
+function normalizeDurationMinutes(value) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return null;
+  }
+  return Math.round(duration);
+}
+
+function getItemDurationMinutes(item) {
+  if (!item) {
+    return null;
+  }
+  return normalizeDurationMinutes(item.durationMinutes) || computeDurationMinutes(item.startTime, item.endTime);
+}
+
+function applyScheduleToItem(item, scheduledDate, startTime, durationMinutes) {
+  if (!item) {
+    return;
+  }
+  const normalizedDuration = normalizeDurationMinutes(durationMinutes);
+  item.scheduledDate = scheduledDate || item.scheduledDate || state.currentDateKey;
+  item.startTime = startTime || "";
+  item.durationMinutes = normalizedDuration;
+  item.endTime = computeEndTime(item.startTime, normalizedDuration);
+}
+
 function hydrateDayOpsItem(type, savedItem) {
   const saved = savedItem || {};
   if (type === DAY_OPS_TYPES.contact) {
@@ -432,6 +497,7 @@ function hydrateDayOpsItem(type, savedItem) {
         scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
         startTime: saved.startTime || parseLegacyWhen(saved.when).startTime,
         endTime: saved.endTime || parseLegacyWhen(saved.when).endTime,
+        durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime),
         completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
         status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
         postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
@@ -455,6 +521,7 @@ function hydrateDayOpsItem(type, savedItem) {
         scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
         startTime: saved.startTime || parseLegacyWhen(saved.when).startTime,
         endTime: saved.endTime || parseLegacyWhen(saved.when).endTime,
+        durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime),
         completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
         status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
         postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
@@ -474,6 +541,7 @@ function hydrateDayOpsItem(type, savedItem) {
       scheduledDate: saved.scheduledDate || saved.sourceDate || state.currentDateKey || getDateKey(),
       startTime: saved.startTime || legacyTime.startTime,
       endTime: saved.endTime || legacyTime.endTime,
+      durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime || legacyTime.startTime, saved.endTime || legacyTime.endTime),
       completed: Boolean(saved.completed || saved.completedAt || saved.status === "done"),
       status: normalizeLegacyStatus(saved.status, saved.completed || saved.completedAt),
       postponedFrom: saved.postponedFrom || saved.carriedOverFrom || null,
@@ -518,6 +586,7 @@ function hydratePriorityItem(dateKey, savedItem, index) {
       scheduledDate: saved.scheduledDate || dateKey,
       startTime: saved.startTime || "",
       endTime: saved.endTime || "",
+      durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime),
       completed: Boolean(saved.completed),
       status: normalizeLegacyStatus(saved.status, saved.completed),
       memo: saved.memo || "",
@@ -1020,7 +1089,6 @@ function ensureCurrentLog() {
   inheritCarryOverItems();
   syncPrimaryMit(getCurrentLog());
   ensureHandoverItems();
-  saveAppState(false);
 }
 
 function hydrateTimerFromLog() {
@@ -1076,6 +1144,7 @@ function initializeState() {
   state.activeScreen = state.bootUnlocked ? restoreLastPage() : "boot";
   state.bootStep = "mission";
   state.appMeta.lastOpenedAt = new Date().toISOString();
+  saveAppState(false);
 }
 
 function showToast(message) {
@@ -1122,7 +1191,7 @@ function ensureTaskUiState(log = getCurrentLog()) {
   state.ui.reschedulingTaskId = null;
   state.ui.reschedulingTaskDate = "";
   state.ui.reschedulingTaskStart = "";
-  state.ui.reschedulingTaskEnd = "";
+  state.ui.reschedulingTaskDuration = "";
 }
 
 function toggleTaskSection(type) {
@@ -1144,7 +1213,7 @@ function resetTaskDraft() {
   state.dayOpsDrafts.task = {
     scheduledDate: state.currentDateKey,
     startTime: "",
-    endTime: "",
+    durationMinutes: "",
     title: "",
     description: "",
     priority: "",
@@ -1160,7 +1229,7 @@ function startTaskReschedule(id) {
   state.ui.reschedulingTaskId = id;
   state.ui.reschedulingTaskDate = item.scheduledDate || state.currentDateKey;
   state.ui.reschedulingTaskStart = item.startTime || "";
-  state.ui.reschedulingTaskEnd = item.endTime || "";
+  state.ui.reschedulingTaskDuration = String(getItemDurationMinutes(item) || "");
   state.ui.taskSections.task = true;
   renderDayOps();
 }
@@ -1169,36 +1238,47 @@ function cancelTaskReschedule() {
   state.ui.reschedulingTaskId = null;
   state.ui.reschedulingTaskDate = "";
   state.ui.reschedulingTaskStart = "";
-  state.ui.reschedulingTaskEnd = "";
+  state.ui.reschedulingTaskDuration = "";
   renderDayOps();
 }
 
-function saveTaskReschedule(id) {
-  const item = findActionItemById(id);
+function updateTaskSchedule(taskId, newDate, newStartTime, durationMinutes) {
+  const item = findActionItemById(taskId);
   if (!item) {
-    return;
+    return false;
   }
-  item.scheduledDate = state.ui.reschedulingTaskDate || state.currentDateKey;
-  item.startTime = state.ui.reschedulingTaskStart || "";
-  item.endTime = state.ui.reschedulingTaskEnd || "";
+  applyScheduleToItem(item, newDate || state.currentDateKey, newStartTime || "", durationMinutes);
   item.postponedTo = item.scheduledDate > state.currentDateKey ? item.scheduledDate : null;
+  item.postponedFrom = item.postponedTo ? state.currentDateKey : null;
   item.status = item.completed ? "done" : item.scheduledDate > state.currentDateKey ? "postponed" : "todo";
   item.updatedAt = new Date().toISOString();
   if (item.sourceItemId) {
     const source = findSourceItemById(item.sourceItemId);
     if (source) {
-      source.scheduledDate = item.scheduledDate;
-      source.startTime = item.startTime;
-      source.endTime = item.endTime;
+      applyScheduleToItem(source, item.scheduledDate, item.startTime, item.durationMinutes);
       source.postponedTo = item.postponedTo;
+      source.postponedFrom = item.postponedFrom;
       source.status = item.status;
       source.updatedAt = item.updatedAt;
     }
   }
+  return true;
+}
+
+function saveTaskReschedule(id) {
+  const updated = updateTaskSchedule(
+    id,
+    state.ui.reschedulingTaskDate || state.currentDateKey,
+    state.ui.reschedulingTaskStart || "",
+    state.ui.reschedulingTaskDuration
+  );
+  if (!updated) {
+    return;
+  }
   state.ui.reschedulingTaskId = null;
   state.ui.reschedulingTaskDate = "";
   state.ui.reschedulingTaskStart = "";
-  state.ui.reschedulingTaskEnd = "";
+  state.ui.reschedulingTaskDuration = "";
   persistDailyLogs(true);
   renderDayOps();
 }
@@ -1216,13 +1296,9 @@ function renderTaskTimeline() {
       .map(
         (item) => `
           <article class="timeline-item status-${getItemStatusClass(item)}">
-            <div class="timeline-time">${escapeHtml(buildTimelineRange(item))}</div>
+            <div class="timeline-time">${escapeHtml(item.startTime || "--:--")}</div>
             <div class="timeline-card">
               <div class="timeline-card-head">
-                <label class="inline-check">
-                  <input type="checkbox" data-item-complete="${item.id}" ${item.completed ? "checked" : ""} />
-                  <span class="toggle-indicator"></span>
-                </label>
                 <div class="timeline-card-main">
                   <h4>${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
                   <p>${escapeHtml(getTimelineSubtitle(item))}</p>
@@ -1230,11 +1306,8 @@ function renderTaskTimeline() {
               </div>
               <div class="dayops-item-meta">
                 <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                <span class="meta-chip">${escapeHtml(getItemDurationMinutes(item) ? `${getItemDurationMinutes(item)}分` : "所要未設定")}</span>
                 <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
-              </div>
-              <div class="dayops-actions">
-                <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
-                <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
               </div>
             </div>
           </article>
@@ -1260,14 +1333,12 @@ function renderTaskTimeline() {
               <article class="dayops-item status-${getItemStatusClass(item)}">
                 <div class="dayops-item-content">
                   <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+                  <p>${escapeHtml(getTimelineSubtitle(item) || "各セクションから時間を設定してください")}</p>
                   <div class="dayops-item-meta">
-                    <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
+                    <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                    <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
                     <span class="meta-chip">時間未設定</span>
                   </div>
-                </div>
-                <div class="dayops-actions">
-                  <button class="secondary-button" data-item-reschedule="${item.id}" type="button">時間を決める</button>
-                  <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
                 </div>
               </article>
             `
@@ -1282,18 +1353,14 @@ function showScreen(screen) {
   if (screen === "night" && !canEnterNight()) {
     showToast("タスクの未整理項目を完了か明日回しにしてください");
     state.activeScreen = "dayOps";
-    renderScreenVisibility();
-    renderFloatingProgressVisibility();
-    renderSaveFabVisibility();
+    renderApp();
     forceScrollTop();
     return;
   }
 
   state.activeScreen = screen;
   state.appMeta.lastActivePage = screen;
-  renderScreenVisibility();
-  renderFloatingProgressVisibility();
-  renderSaveFabVisibility();
+  renderApp();
   saveCurrentPage(screen);
   forceScrollTop();
 }
@@ -1448,9 +1515,11 @@ function renderTaskHandoffCard() {
             </div>
           </div>
           <div class="dayops-actions">
-            <button class="subtle-button" data-item-complete-button="${item.id}" type="button">${item.completed ? "未完了に戻す" : "完了"}</button>
-            <button class="secondary-button" data-handover-activate="${item.id}" type="button">今日やる</button>
-            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">再延期</button>
+            <button class="action-button action-complete" data-item-complete-button="${item.id}" type="button">完了</button>
+            <button class="action-button action-reset" data-item-reset="${item.id}" type="button">未着手</button>
+            <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
+            <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
+            <button class="action-button action-activate" data-handover-activate="${item.id}" type="button">今日やる</button>
           </div>
         </article>
       `
@@ -1578,20 +1647,19 @@ function renderTaskFocusList() {
     .map(
       (item, index) => `
         <article class="task-focus-item status-${getItemStatusClass(item)}">
-          <label class="inline-check">
-            <input type="checkbox" data-item-complete="${item.id}" ${item.completed ? "checked" : ""} />
-            <span class="toggle-indicator"></span>
-          </label>
           <div class="task-focus-copy">
             <div class="task-focus-head">
               <span class="task-focus-index">${index + 1}</span>
               <strong>${escapeHtml(item.title || "未設定")}</strong>
             </div>
-            <p>${escapeHtml(buildTimelineRange(item))}${item.memo ? ` / ${escapeHtml(item.memo)}` : ""}</p>
+            <p class="task-focus-meta">${escapeHtml(buildScheduleMetaLine(item) || "日時未設定")}</p>
+            ${item.memo ? `<p class="task-focus-note">${escapeHtml(item.memo)}</p>` : ""}
           </div>
           <div class="dayops-actions">
-            <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
-            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
+            <button class="action-button action-complete" data-item-complete-button="${item.id}" type="button">完了</button>
+            <button class="action-button action-reset" data-item-reset="${item.id}" type="button">未着手</button>
+            <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
+            <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
           </div>
         </article>
       `
@@ -1632,15 +1700,6 @@ function getTaskStatusLabel(item) {
   if (item.completed || item.status === "done") {
     return "完了";
   }
-  if (item.status === "doing") {
-    return "実行中";
-  }
-  if (item.status === "pending") {
-    return "保留";
-  }
-  if (item.status === "postponed") {
-    return "明日に回す";
-  }
   return "未着手";
 }
 
@@ -1675,13 +1734,32 @@ function getTaskTypeLabel(item) {
 }
 
 function buildTimelineRange(item) {
-  if (item.startTime && item.endTime) {
-    return `${item.startTime} - ${item.endTime}`;
+  const duration = getItemDurationMinutes(item);
+  if (item.startTime && duration) {
+    return `${item.startTime} / ${duration}分`;
   }
   if (item.startTime) {
     return item.startTime;
   }
+  if (duration) {
+    return `${duration}分`;
+  }
   return "時間未設定";
+}
+
+function buildScheduleMetaLine(item) {
+  const parts = [];
+  if (item.scheduledDate) {
+    parts.push(item.scheduledDate);
+  }
+  if (item.startTime) {
+    parts.push(`開始 ${item.startTime}`);
+  }
+  const duration = getItemDurationMinutes(item);
+  if (duration) {
+    parts.push(`所要 ${duration}分`);
+  }
+  return parts.join(" / ");
 }
 
 function getTimelineSubtitle(item) {
@@ -1697,21 +1775,18 @@ function getTimelineSubtitle(item) {
 function buildDayOpsMeta(item) {
   if (item.type === "contact") {
     return [
-      item.startTime ? `開始: ${item.startTime}` : "",
-      item.endTime ? `終了: ${item.endTime}` : "",
+      buildScheduleMetaLine(item),
       item.contactTool ? `ツール: ${item.contactTool === "その他" ? item.contactToolOther || "その他" : item.contactTool}` : "",
     ].filter(Boolean);
   }
   if (item.type === "schedule") {
     return [
-      item.startTime ? `開始: ${item.startTime}` : "",
-      item.endTime ? `終了: ${item.endTime}` : "",
+      buildScheduleMetaLine(item),
       item.contactTool ? `ツール: ${item.contactTool === "その他" ? item.contactToolOther || "その他" : item.contactTool}` : "",
     ].filter(Boolean);
   }
   return [
-    item.startTime ? `開始: ${item.startTime}` : "",
-    item.endTime ? `終了: ${item.endTime}` : "",
+    buildScheduleMetaLine(item),
     item.priority ? `優先度: ${item.priority}` : "",
     item.description ? item.description : "",
   ].filter(Boolean);
@@ -1750,10 +1825,11 @@ function renderDayOpsList(containerId, items, type) {
             </div>
           </div>
           <div class="dayops-actions">
-            <button class="subtle-button ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">${isDone ? "未完了に戻す" : "完了"}</button>
-            <button class="subtle-button" data-item-postpone="${item.id}" type="button">明日に回す</button>
-            <button class="ghost-button" data-item-reschedule="${item.id}" type="button">日時変更</button>
-            <button class="ghost-button danger-button" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
+            <button class="action-button action-complete ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">完了</button>
+            <button class="action-button action-reset ${!isDone ? "is-active" : ""}" data-item-reset="${item.id}" type="button">未着手</button>
+            <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
+            <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
+            <button class="action-button action-delete" data-dayops-delete="${type}:${item.id}" type="button">削除</button>
           </div>
           ${
             isRescheduling
@@ -1768,8 +1844,8 @@ function renderDayOpsList(containerId, items, type) {
                       <input type="time" data-task-reschedule-start="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskStart)}" />
                     </label>
                     <label>
-                      <span>終了</span>
-                      <input type="time" data-task-reschedule-end="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskEnd)}" />
+                      <span>所要時間(分)</span>
+                      <input type="number" min="1" inputmode="numeric" data-task-reschedule-duration="${item.id}" value="${escapeHtml(state.ui.reschedulingTaskDuration)}" />
                     </label>
                   </div>
                   <div class="action-row compact-row">
@@ -1809,7 +1885,7 @@ function renderDayOps() {
   document.getElementById("schedule-memo").value = state.dayOpsDrafts.schedule121.memo;
   document.getElementById("task-date").value = state.dayOpsDrafts.task.scheduledDate || state.currentDateKey;
   document.getElementById("task-start").value = state.dayOpsDrafts.task.startTime;
-  document.getElementById("task-end").value = state.dayOpsDrafts.task.endTime;
+  document.getElementById("task-duration").value = state.dayOpsDrafts.task.durationMinutes;
   document.getElementById("task-title").value = state.dayOpsDrafts.task.title;
   document.getElementById("task-goal").value = state.dayOpsDrafts.task.description;
   document.getElementById("task-priority").value = state.dayOpsDrafts.task.priority;
@@ -1818,7 +1894,7 @@ function renderDayOps() {
   document.getElementById("task-form-submit-button").textContent = "タスクを追加";
   document.getElementById("global-reschedule-date").value = state.ui.reschedulingTaskDate || state.currentDateKey;
   document.getElementById("global-reschedule-start").value = state.ui.reschedulingTaskStart;
-  document.getElementById("global-reschedule-end").value = state.ui.reschedulingTaskEnd;
+  document.getElementById("global-reschedule-duration").value = state.ui.reschedulingTaskDuration;
   document.getElementById("global-reschedule-panel").classList.toggle("hidden", !state.ui.reschedulingTaskId);
 
   renderTaskHandoffCard();
@@ -2282,6 +2358,7 @@ function addDayOpsItem(type) {
         scheduledDate: draft.scheduledDate || state.currentDateKey,
         startTime: draft.startTime || "",
         endTime: draft.endTime || "",
+        durationMinutes: computeDurationMinutes(draft.startTime, draft.endTime),
         contactTool: draft.contactTool || "",
         contactToolOther: draft.contactToolOther || "",
         memo: draft.memo.trim(),
@@ -2294,6 +2371,7 @@ function addDayOpsItem(type) {
       scheduledDate: state.currentDateKey,
       startTime: "",
       endTime: "",
+      durationMinutes: "",
       name: "",
       requirement: "",
       contactTool: "",
@@ -2313,6 +2391,7 @@ function addDayOpsItem(type) {
         scheduledDate: draft.scheduledDate || state.currentDateKey,
         startTime: draft.startTime || "",
         endTime: draft.endTime || "",
+        durationMinutes: computeDurationMinutes(draft.startTime, draft.endTime),
         contactTool: draft.contactTool || "",
         contactToolOther: draft.contactToolOther || "",
         candidateDates: String(draft.candidateDatesText || "")
@@ -2329,6 +2408,7 @@ function addDayOpsItem(type) {
       scheduledDate: state.currentDateKey,
       startTime: "",
       endTime: "",
+      durationMinutes: "",
       name: "",
       job: "",
       contactTool: "",
@@ -2349,7 +2429,8 @@ function addDayOpsItem(type) {
         priority: draft.priority || null,
         scheduledDate: draft.scheduledDate || state.currentDateKey,
         startTime: draft.startTime || "",
-        endTime: draft.endTime || "",
+        durationMinutes: normalizeDurationMinutes(draft.durationMinutes),
+        endTime: computeEndTime(draft.startTime || "", normalizeDurationMinutes(draft.durationMinutes)),
         sourceDate: log.date,
         createdAt: now,
         updatedAt: now,
@@ -2445,25 +2526,25 @@ function postponeItemToTomorrow(id) {
   const date = new Date(`${state.currentDateKey}T00:00:00`);
   date.setDate(date.getDate() + 1);
   const tomorrow = getDateKey(date);
-  item.postponedFrom = state.currentDateKey;
-  item.postponedTo = tomorrow;
-  item.scheduledDate = tomorrow;
-  item.status = "postponed";
-  item.completed = false;
-  item.updatedAt = new Date().toISOString();
-  if (item.sourceItemId) {
-    const source = findSourceItemById(item.sourceItemId);
+  updateTaskSchedule(id, tomorrow, item.startTime || "", getItemDurationMinutes(item));
+  const target = findItemById(id);
+  target.completed = false;
+  target.status = "postponed";
+  target.postponedFrom = state.currentDateKey;
+  target.postponedTo = tomorrow;
+  target.updatedAt = new Date().toISOString();
+  if (target.sourceItemId) {
+    const source = findSourceItemById(target.sourceItemId);
     if (source) {
+      source.completed = false;
+      source.status = "postponed";
       source.postponedFrom = state.currentDateKey;
       source.postponedTo = tomorrow;
-      source.scheduledDate = tomorrow;
-      source.status = "postponed";
-      source.completed = false;
-      source.updatedAt = item.updatedAt;
+      source.updatedAt = target.updatedAt;
     }
   }
-  if (item.id.startsWith("handover-")) {
-    item.handoverResolved = true;
+  if (target.id.startsWith("handover-")) {
+    target.handoverResolved = true;
   }
   persistDailyLogs(true);
   renderDayOps();
@@ -2484,8 +2565,9 @@ function activateHandoverItem(id) {
   const bucket = getDayOpsBucketByType(getCurrentLog(), targetType);
   const existing = bucket.find((item) => item.sourceItemId === handoverItem.sourceItemId || item.id === handoverItem.sourceItemId);
   if (existing) {
-    existing.scheduledDate = state.currentDateKey;
+    updateTaskSchedule(existing.id, state.currentDateKey, existing.startTime || "", getItemDurationMinutes(existing));
     existing.postponedTo = null;
+    existing.postponedFrom = null;
     existing.status = "todo";
     existing.updatedAt = new Date().toISOString();
   } else {
@@ -2496,6 +2578,7 @@ function activateHandoverItem(id) {
         type: handoverItem.sourceType || handoverItem.type,
         scheduledDate: state.currentDateKey,
         postponedTo: null,
+        postponedFrom: null,
         status: "todo",
         completed: false,
       })
@@ -2503,8 +2586,9 @@ function activateHandoverItem(id) {
   }
   const source = findSourceItemById(handoverItem.sourceItemId);
   if (source) {
-    source.scheduledDate = state.currentDateKey;
+    updateTaskSchedule(source.id, state.currentDateKey, source.startTime || "", getItemDurationMinutes(source));
     source.postponedTo = null;
+    source.postponedFrom = null;
     source.status = "todo";
     source.completed = false;
     source.updatedAt = new Date().toISOString();
@@ -2537,7 +2621,7 @@ function deleteDayOpsItem(type, id) {
     state.ui.reschedulingTaskId = null;
     state.ui.reschedulingTaskDate = "";
     state.ui.reschedulingTaskStart = "";
-    state.ui.reschedulingTaskEnd = "";
+    state.ui.reschedulingTaskDuration = "";
   }
   persistDailyLogs(true);
   renderDayOps();
@@ -2641,8 +2725,12 @@ function handleClick(event) {
   }
 
   if (target.dataset.itemCompleteButton) {
-    const item = findItemById(target.dataset.itemCompleteButton);
-    markItemCompleted(target.dataset.itemCompleteButton, !(item && item.completed));
+    markItemCompleted(target.dataset.itemCompleteButton, true);
+    return;
+  }
+
+  if (target.dataset.itemReset) {
+    markItemCompleted(target.dataset.itemReset, false);
     return;
   }
 
@@ -2870,8 +2958,8 @@ function handleInput(event) {
     return;
   }
 
-  if (target.dataset.taskRescheduleEnd) {
-    state.ui.reschedulingTaskEnd = target.value;
+  if (target.dataset.taskRescheduleDuration) {
+    state.ui.reschedulingTaskDuration = target.value;
     return;
   }
 

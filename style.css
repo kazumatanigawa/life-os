@@ -537,18 +537,20 @@ select:focus {
 
 .task-focus-item {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr;
   gap: 0.8rem;
   align-items: start;
-  padding: 0.85rem 0.95rem;
+  padding: 1rem 1rem 1.05rem;
   border-radius: 18px;
-  border: 1px solid rgba(212, 175, 55, 0.16);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(248, 248, 248, 0.92);
+  color: #141414;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
 }
 
 .task-focus-item p {
   margin: 0;
-  color: var(--text);
+  color: #44505d;
 }
 
 .task-focus-copy {
@@ -557,7 +559,16 @@ select:focus {
 }
 
 .task-focus-head strong {
-  font-size: 1rem;
+  font-size: 1.06rem;
+  font-weight: 800;
+}
+
+.task-focus-meta {
+  font-size: 0.88rem;
+}
+
+.task-focus-note {
+  font-size: 0.92rem;
 }
 
 .task-focus-index {
@@ -570,6 +581,16 @@ select:focus {
   background: rgba(212, 175, 55, 0.16);
   color: var(--accent);
   font-weight: 800;
+}
+
+.task-focus-item.status-done,
+.timeline-item.status-done .timeline-card {
+  opacity: 0.62;
+}
+
+.task-focus-item.status-done .task-focus-head strong,
+.timeline-item.status-done .timeline-card h4 {
+  text-decoration: line-through;
 }
 
 .task-handoff-card {
@@ -678,7 +699,9 @@ select:focus {
   padding: 0.95rem 1rem;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(248, 248, 248, 0.94);
+  color: #151515;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
 }
 
 .timeline-card h4,
@@ -687,29 +710,13 @@ select:focus {
 }
 
 .timeline-card p {
-  color: var(--subtext);
+  color: #556170;
 }
 
 .timeline-card-main {
   display: grid;
   gap: 0.25rem;
   flex: 1;
-}
-
-.inline-check {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-}
-
-.inline-check input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
 }
 
 .timeline-unscheduled-list {
@@ -1019,7 +1026,8 @@ body.nav-visible .save-fab {
 }
 
 .dayops-item.status-open {
-  border-color: rgba(235, 87, 87, 0.2);
+  border-color: rgba(109, 138, 201, 0.24);
+  background: linear-gradient(135deg, rgba(111, 151, 255, 0.08), rgba(255, 255, 255, 0.94));
 }
 
 .dayops-item-content {
@@ -1052,10 +1060,10 @@ body.nav-visible .save-fab {
 }
 
 .status-badge.status-open {
-  color: #ffe3e3;
-  border-color: rgba(235, 87, 87, 0.42);
-  background: rgba(235, 87, 87, 0.15);
-  box-shadow: 0 0 12px rgba(235, 87, 87, 0.12);
+  color: #edf4ff;
+  border-color: rgba(99, 146, 244, 0.36);
+  background: rgba(99, 146, 244, 0.62);
+  box-shadow: 0 0 12px rgba(99, 146, 244, 0.18);
 }
 
 .status-badge.status-done {
@@ -1076,6 +1084,45 @@ body.nav-visible .save-fab {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+}
+
+.action-button {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  min-height: 44px;
+  padding: 0.75rem 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+.action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.action-button.is-active {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 22px rgba(255, 255, 255, 0.08);
+}
+
+.action-complete {
+  background: linear-gradient(135deg, #27ae60, #1b8e4a);
+}
+
+.action-reset {
+  background: linear-gradient(135deg, #7f8c99, #5f6b76);
+}
+
+.action-postpone,
+.action-activate {
+  background: linear-gradient(135deg, #3b82f6, #2759c7);
+}
+
+.action-reschedule {
+  background: linear-gradient(135deg, #6d5dfc, #4b3ddb);
+}
+
+.action-delete {
+  background: linear-gradient(135deg, #d95c5c, #b43d3d);
 }
 
 .task-reschedule-panel {
@@ -1609,6 +1656,7 @@ body.nav-visible .save-fab {
     gap: 0.7rem;
   }
 
+  .dayops-actions .action-button,
   .dayops-actions .subtle-button,
   .dayops-actions .ghost-button {
     width: 100%;
