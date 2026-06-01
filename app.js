@@ -198,7 +198,9 @@ const state = {
     reschedulingTaskStart: "",
     reschedulingTaskDuration: "",
     expandedTaskItems: {},
+    expandedTimelineItems: {},
     completedTasksOpen: false,
+    pendingScrollTargetId: null,
   },
   saveState: {
     status: "saved",
@@ -1221,7 +1223,9 @@ function ensureTaskUiState(log = getCurrentLog()) {
   state.ui.reschedulingTaskStart = "";
   state.ui.reschedulingTaskDuration = "";
   state.ui.expandedTaskItems = {};
+  state.ui.expandedTimelineItems = {};
   state.ui.completedTasksOpen = false;
+  state.ui.pendingScrollTargetId = null;
 }
 
 function toggleTaskSection(type) {
@@ -1233,6 +1237,12 @@ function toggleTaskSection(type) {
 function toggleTaskItemExpanded(id) {
   ensureTaskUiState();
   state.ui.expandedTaskItems[id] = !state.ui.expandedTaskItems[id];
+  renderDayOps();
+}
+
+function toggleTimelineItemExpanded(id) {
+  ensureTaskUiState();
+  state.ui.expandedTimelineItems[id] = !state.ui.expandedTimelineItems[id];
   renderDayOps();
 }
 
@@ -1263,7 +1273,38 @@ function resetTaskDraft() {
   };
 }
 
-function startTaskReschedule(id) {
+function scrollToPendingTarget() {
+  if (!state.ui.pendingScrollTargetId) {
+    return;
+  }
+  const targetId = state.ui.pendingScrollTargetId;
+  state.ui.pendingScrollTargetId = null;
+  window.requestAnimationFrame(() => {
+    const node = document.getElementById(targetId);
+    if (!node) {
+      return;
+    }
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+function getTaskSectionForItem(item) {
+  if (!item) {
+    return null;
+  }
+  if (item.type === "contact") {
+    return DAY_OPS_TYPES.contact;
+  }
+  if (item.type === "schedule") {
+    return DAY_OPS_TYPES.schedule121;
+  }
+  if (item.type === "task") {
+    return DAY_OPS_TYPES.task;
+  }
+  return null;
+}
+
+function startTaskReschedule(id, options = {}) {
   const item = findActionItemById(id);
   if (!item) {
     return;
@@ -1272,7 +1313,19 @@ function startTaskReschedule(id) {
   state.ui.reschedulingTaskDate = item.scheduledDate || state.currentDateKey;
   state.ui.reschedulingTaskStart = item.startTime || "";
   state.ui.reschedulingTaskDuration = String(getItemDurationMinutes(item) || "");
-  state.ui.taskSections.task = true;
+  if (options.fromTimeline) {
+    const section = getTaskSectionForItem(item);
+    if (section) {
+      state.ui.taskSections[section] = true;
+      state.ui.taskSections[TASK_TIMELINE_SECTION] = true;
+      if (section === DAY_OPS_TYPES.task) {
+        state.ui.expandedTaskItems[id] = true;
+      }
+      state.ui.pendingScrollTargetId = `dayops-item-${id}`;
+    }
+  } else {
+    state.ui.taskSections.task = true;
+  }
   renderDayOps();
 }
 
@@ -1335,33 +1388,39 @@ function renderTaskTimeline() {
     container.innerHTML = '<div class="dayops-empty">今日の時間付きタスクはまだありません。</div>';
   } else {
     container.innerHTML = timelineItems
-      .map(
-        (item) => `
-          <article class="timeline-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""}">
+      .map((item) => {
+        const expanded = Boolean(state.ui.expandedTimelineItems[item.id]);
+        return `
+          <article class="timeline-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""} ${expanded ? "is-expanded" : ""}" id="timeline-item-${item.id}">
             <div class="timeline-time">${escapeHtml(item.startTime || "--:--")}</div>
             <div class="timeline-card">
-              <div class="timeline-card-head">
-                <div class="timeline-card-main">
-                  ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
-                  <h4>${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
-                  <p>${escapeHtml(getTimelineSubtitle(item))}</p>
+              <button class="timeline-accordion-toggle" data-timeline-item-toggle="${item.id}" type="button">
+                <div class="timeline-card-head">
+                  <div class="timeline-card-main">
+                    ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
+                    <h4>${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+                    <p>${escapeHtml(getTaskTypeLabel(item))} / ${escapeHtml(getTimelineSubtitle(item) || "詳細なし")}</p>
+                  </div>
                 </div>
-              </div>
-              <div class="dayops-item-meta">
-                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
-                <span class="meta-chip">${escapeHtml(getItemDurationMinutes(item) ? `${getItemDurationMinutes(item)}分` : "所要未設定")}</span>
-                <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
-              </div>
-              <div class="timeline-card-foot">
-                <p class="timeline-card-meta">${escapeHtml(buildScheduleMetaLine(item) || "日時未設定")}</p>
-                <div class="dayops-actions timeline-actions">
-                  ${buildTaskActionButtons(item)}
+                <span class="task-section-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="timeline-accordion-body ${expanded ? "" : "hidden"}">
+                <div class="dayops-item-meta">
+                  <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
+                  <span class="meta-chip">${escapeHtml(getItemDurationMinutes(item) ? `${getItemDurationMinutes(item)}分` : "所要未設定")}</span>
+                  <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
+                </div>
+                <div class="timeline-card-foot">
+                  <p class="timeline-card-meta">${escapeHtml(buildScheduleMetaLine(item) || "日時未設定")}</p>
+                  <div class="dayops-actions timeline-actions">
+                    ${buildTaskActionButtons(item, { fromTimeline: true })}
+                  </div>
                 </div>
               </div>
             </div>
           </article>
-        `
-      )
+        `;
+      })
       .join("");
   }
 
@@ -1377,25 +1436,31 @@ function renderTaskTimeline() {
       </div>
       <div class="dayops-list">
         ${unscheduledItems
-          .map(
-            (item) => `
-              <article class="dayops-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""}">
-                <div class="dayops-item-content">
-                  ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
-                  <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
-                  <p>${escapeHtml(getTimelineSubtitle(item) || "各セクションから時間を設定してください")}</p>
+          .map((item) => {
+            const expanded = Boolean(state.ui.expandedTimelineItems[item.id]);
+            return `
+              <article class="dayops-item status-${getItemStatusClass(item)} ${item.isImportantToday ? "is-important" : ""} timeline-unscheduled-item ${expanded ? "is-expanded" : ""}" id="timeline-item-${item.id}">
+                <button class="timeline-accordion-toggle" data-timeline-item-toggle="${item.id}" type="button">
+                  <div class="dayops-item-content">
+                    ${item.isImportantToday ? '<span class="timeline-important-badge">最重要</span>' : ""}
+                    <h4 class="dayops-item-title">${escapeHtml(item.title || item.contactPerson || "未設定")}</h4>
+                    <p>${escapeHtml(getTaskTypeLabel(item))} / ${escapeHtml(getTimelineSubtitle(item) || "各セクションから時間を設定してください")}</p>
+                  </div>
+                  <span class="task-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="timeline-accordion-body ${expanded ? "" : "hidden"}">
                   <div class="dayops-item-meta">
                     <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskStatusLabel(item))}</span>
                     <span class="meta-chip">${escapeHtml(getTaskTypeLabel(item))}</span>
                     <span class="meta-chip">時間未設定</span>
                   </div>
-                </div>
-                <div class="dayops-actions timeline-actions">
-                  ${buildTaskActionButtons(item)}
+                  <div class="dayops-actions timeline-actions">
+                    ${buildTaskActionButtons(item, { fromTimeline: true })}
+                  </div>
                 </div>
               </article>
-            `
-          )
+            `;
+          })
           .join("")}
       </div>
     </article>
@@ -1647,6 +1712,30 @@ function renderFloatingProgressVisibility() {
   floating.classList.toggle("visible", visible);
 }
 
+function renderFloatingTimelineVisibility() {
+  const floating = document.getElementById("floating-timeline");
+  const summary = document.getElementById("floating-timeline-summary");
+  if (!floating || !summary) {
+    return;
+  }
+  const section = document.getElementById("task-section-timeline");
+  const body = document.getElementById("task-section-body-timeline");
+  const memo = document.getElementById("task-memo-section");
+  const sourceSummary = document.getElementById("task-section-summary-timeline");
+  const active = state.activeScreen === "dayOps" && section && body && memo && !body.classList.contains("hidden");
+  if (!active) {
+    floating.classList.add("hidden");
+    floating.classList.remove("visible");
+    return;
+  }
+  const sectionRect = section.getBoundingClientRect();
+  const memoRect = memo.getBoundingClientRect();
+  const visible = sectionRect.top <= 16 && memoRect.top > 96;
+  summary.textContent = sourceSummary ? sourceSummary.innerText.replace(/\s+/g, " ").trim() : "";
+  floating.classList.remove("hidden");
+  floating.classList.toggle("visible", visible);
+}
+
 function renderFloatingTimerVisibility() {
   const floating = document.getElementById("floating-timer");
   const visible = state.activeScreen === "boot" && state.bootStep === "timeMachine";
@@ -1777,6 +1866,7 @@ function renderTimelineSection() {
     .filter(Boolean)
     .join("");
   summary.classList.toggle("is-empty", timelineItems.length + unscheduledItems.length === 0);
+  renderFloatingTimelineVisibility();
 }
 
 function getTaskStatusLabel(item) {
@@ -1849,6 +1939,9 @@ function buildTaskActionButtons(item, options = {}) {
   const isDone = item.completed || item.status === "done";
   const includeDelete = Boolean(options.includeDelete);
   const type = options.type || item.type || DAY_OPS_TYPES.task;
+  const fromTimeline = Boolean(options.fromTimeline);
+  const rescheduleAttr =
+    fromTimeline && getTaskSectionForItem(item) ? `data-item-timeline-reschedule="${item.id}"` : `data-item-reschedule="${item.id}"`;
   const deleteAction = includeDelete
     ? `<button class="action-button action-delete" data-dayops-delete="${type}:${item.id}" type="button">削除</button>`
     : "";
@@ -1856,7 +1949,7 @@ function buildTaskActionButtons(item, options = {}) {
     <button class="action-button action-complete ${isDone ? "is-active" : ""}" data-item-complete-button="${item.id}" type="button">✓ 完了</button>
     <button class="action-button action-reset ${!isDone ? "is-active" : ""}" data-item-reset="${item.id}" type="button">未着手</button>
     <button class="action-button action-postpone" data-item-postpone="${item.id}" type="button">明日に回す</button>
-    <button class="action-button action-reschedule" data-item-reschedule="${item.id}" type="button">時間変更</button>
+    <button class="action-button action-reschedule" ${rescheduleAttr} type="button">時間変更</button>
     ${deleteAction}
   `;
 }
@@ -1916,7 +2009,7 @@ function renderDayOpsList(containerId, items, type) {
       const scheduleMeta = buildScheduleMetaLine(item) || "日時未設定";
       const summaryMeta = [item.priority ? `優先度 ${item.priority}` : "", item.scheduledDate || ""].filter(Boolean).join(" / ");
       return `
-        <article class="dayops-item status-${getItemStatusClass(item)} ${isTask ? "task-accordion-item" : ""} ${isExpanded ? "is-expanded" : ""}">
+        <article class="dayops-item status-${getItemStatusClass(item)} ${isTask ? "task-accordion-item" : ""} ${isExpanded ? "is-expanded" : ""}" id="dayops-item-${item.id}">
           ${
             isTask
               ? `<button class="task-accordion-toggle" data-task-item-toggle="${item.id}" type="button">
@@ -2068,6 +2161,7 @@ function renderDayOps() {
   document.getElementById("dayops-status-note").classList.toggle("is-alert", unresolved > 0);
   document.getElementById("dayops-next-button").disabled = unresolved > 0;
   updateProgressUi();
+  scrollToPendingTarget();
 }
 
 function renderNight() {
@@ -2220,6 +2314,7 @@ function renderApp() {
   renderSettings();
   renderOutputPanel();
   renderFloatingProgressVisibility();
+  renderFloatingTimelineVisibility();
   renderSaveFabVisibility();
   renderSaveStatus();
 }
@@ -2877,6 +2972,11 @@ function handleClick(event) {
     return;
   }
 
+  if (target.dataset.timelineItemToggle) {
+    toggleTimelineItemExpanded(target.dataset.timelineItemToggle);
+    return;
+  }
+
   if (target.id === "task-completed-toggle") {
     toggleCompletedTaskGroup();
     return;
@@ -2904,6 +3004,11 @@ function handleClick(event) {
 
   if (target.dataset.itemPostpone) {
     postponeItemToTomorrow(target.dataset.itemPostpone);
+    return;
+  }
+
+  if (target.dataset.itemTimelineReschedule) {
+    startTaskReschedule(target.dataset.itemTimelineReschedule, { fromTimeline: true });
     return;
   }
 
@@ -3155,6 +3260,7 @@ function handleInput(event) {
 
 function handleScroll() {
   renderFloatingProgressVisibility();
+  renderFloatingTimelineVisibility();
 }
 
 function handleVisibilitySave() {
