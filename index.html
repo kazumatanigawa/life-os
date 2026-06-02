@@ -459,14 +459,6 @@
         </section>
 
         <section class="screen hidden" id="night-screen">
-          <div class="hero-card night-hero">
-            <div class="section-heading">
-              <p class="section-kicker">Night Board</p>
-              <h2>夜の振り返り</h2>
-            </div>
-            <p class="support-text">今日を締めて、明日に渡す。</p>
-          </div>
-
           <div class="screen-grid">
             <article class="card night-card span-two">
               <div class="section-heading">
@@ -474,6 +466,30 @@
                 <h3>夜ルーティン</h3>
               </div>
               <div id="night-routine-list" class="routine-list"></div>
+            </article>
+
+            <article class="card night-card span-two">
+              <div class="section-heading">
+                <p class="section-kicker">Night Task</p>
+                <h3>夜に思いついたタスク</h3>
+              </div>
+              <div class="dayops-form-grid">
+                <label>
+                  <span>予定日</span>
+                  <input id="night-task-date" data-night-task-draft="scheduledDate" type="date" />
+                </label>
+                <label class="span-two">
+                  <span>タスク名</span>
+                  <input id="night-task-title" data-night-task-draft="title" type="text" placeholder="明日以降にやること" />
+                </label>
+                <label class="span-two">
+                  <span>補足</span>
+                  <input id="night-task-description" data-night-task-draft="description" type="text" placeholder="必要ならゴールや補足を書く" />
+                </label>
+              </div>
+              <div class="action-row compact-row">
+                <button class="secondary-button" id="add-night-task-button" type="button">タスクとして追加</button>
+              </div>
             </article>
 
             <article class="card night-card">
@@ -519,26 +535,6 @@
                   <input id="gratitude-weekly-action" type="text" placeholder="今週返すアクション" />
                 </label>
               </div>
-            </article>
-
-            <article class="card night-card">
-              <div class="section-heading">
-                <p class="section-kicker">Reminders</p>
-                <h3>明日のリマインド</h3>
-              </div>
-              <div class="reminder-input-row">
-                <input id="new-reminder-input" type="text" placeholder="新しいリマインドを追加" />
-                <button class="secondary-button" id="add-reminder-button" type="button">追加</button>
-              </div>
-              <div id="reminder-list" class="reminder-list"></div>
-            </article>
-
-            <article class="card night-card span-two">
-              <div class="section-heading">
-                <p class="section-kicker">Memo</p>
-                <h3>メモ</h3>
-              </div>
-              <textarea id="memo" rows="7" placeholder="自由メモ"></textarea>
             </article>
           </div>
 
