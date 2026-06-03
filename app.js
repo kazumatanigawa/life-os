@@ -4,9 +4,12 @@ const STORAGE_KEYS = {
   settings: "lifeOS_settings",
 };
 
-const APP_VERSION = "2026-06-01-task-rebuild";
+const APP_VERSION = "2026-06-03-life-goal-carryover";
 
-const AIRMATE_WEB_URL = "https://airmate.jp/realtime/";
+const CHATGPT_WEB_URL = "https://chatgpt.com/";
+const MORNING_NEWS_SHORTCUT_URL = "shortcuts://run-shortcut?name=%E4%BB%8A%E6%9C%9D%E3%81%AE%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%B9%E9%80%81%E4%BF%A1";
+const AIRMATE_WEB_URL = "https://airmate.airregi.jp/";
+const AIRMATE_LEGACY_REALTIME_URL = "https://airmate.jp/realtime/";
 const AIRMATE_APP_URL =
   "https://faq.mate.airregi.jp/hc/ja/articles/4507008511646-%E3%82%B9%E3%83%9E%E3%83%BC%E3%83%88%E3%83%95%E3%82%A9%E3%83%B3%E7%89%88-Air%E3%83%A1%E3%82%A4%E3%83%88-%E3%82%A2%E3%83%97%E3%83%AA%E3%81%AE%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB%E6%96%B9%E6%B3%95";
 
@@ -60,7 +63,7 @@ const MISSION_SECTIONS = [
 ];
 
 const MORNING_ROUTINE_ITEMS = [
-  { key: "financeNews", label: "今朝のニュース", linkKey: "morningNewsShortcut", hint: "タップして送信" },
+  { key: "financeNews", label: "今朝のニュース", linkKey: "morningNewsShortcut", hint: "タップして開く" },
   { key: "yearSchedule", label: "年スケ", linkKey: "yearSchedule", hint: "タップして開く" },
   { key: "googleCalendar", label: "Google Calendar", linkKey: "googleCalendar", hint: "タップして開く" },
   { key: "storeStatus", label: "店舗状況確認", linkKey: "storeStatus", hint: "タップして開く" },
@@ -94,7 +97,7 @@ const TIME_MACHINE_FIELDS = [
 ];
 
 const LINK_DEFINITIONS = [
-  { key: "morningNewsShortcut", label: "今朝のニュースショートカット" },
+  { key: "morningNewsShortcut", label: "今朝のニュース" },
   { key: "yearSchedule", label: "年スケ" },
   { key: "googleCalendar", label: "Google Calendar" },
   { key: "storeStatus", label: "店舗状況確認" },
@@ -115,11 +118,11 @@ const DEFAULT_SETTINGS = {
     requireTimeMachine: true,
   },
   links: {
-    morningNewsShortcut: "shortcuts://run-shortcut?name=%E4%BB%8A%E6%9C%9D%E3%81%AE%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%B9%E9%80%81%E4%BF%A1",
+    morningNewsShortcut: CHATGPT_WEB_URL,
     yearSchedule:
       "https://docs.google.com/spreadsheets/d/1d3mg9evgvgK5fof9gex_IG-RwSKq9Ei5fKo-6IkjhDQ/edit?gid=1124633243#gid=1124633243",
     googleCalendar: "https://calendar.google.com/calendar/u/0/r",
-    storeStatus: AIRMATE_APP_URL,
+    storeStatus: AIRMATE_WEB_URL,
     weeklyReport:
       "https://docs.google.com/spreadsheets/d/1a_1WDE09KQlCJHVozd84p82weuYts5g9v0qnPNWuc9c/edit?gid=1421133413#gid=1421133413",
     gakumeizaMeetingLog:
@@ -726,6 +729,20 @@ function formatMorningHeaderDate(dateKey) {
   return `${dateKey} (${weekday})`;
 }
 
+function formatCompletedAtTime(value) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatCountdown(seconds) {
   const safe = Math.max(0, Number(seconds) || 0);
   const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
@@ -759,8 +776,19 @@ function saveJson(key, value) {
 function loadSettings(savedSettings = null) {
   const saved = savedSettings || loadJson(STORAGE_KEYS.settings, null);
   const merged = mergeWithDefaults(DEFAULT_SETTINGS, saved || {});
-  if (merged.links.storeStatus === AIRMATE_WEB_URL) {
-    merged.links.storeStatus = AIRMATE_APP_URL;
+  if (
+    merged.links.morningNewsShortcut === MORNING_NEWS_SHORTCUT_URL ||
+    merged.links.morningNewsShortcut === "chatgpt://" ||
+    !String(merged.links.morningNewsShortcut || "").trim()
+  ) {
+    merged.links.morningNewsShortcut = CHATGPT_WEB_URL;
+  }
+  if (
+    merged.links.storeStatus === AIRMATE_APP_URL ||
+    merged.links.storeStatus === AIRMATE_LEGACY_REALTIME_URL ||
+    !String(merged.links.storeStatus || "").trim()
+  ) {
+    merged.links.storeStatus = AIRMATE_WEB_URL;
   }
   return merged;
 }
@@ -906,10 +934,9 @@ function getAllDayOpsItems(log = getCurrentLog()) {
   return getDayOpsCollections(log).flatMap((entry) => entry.items);
 }
 
-function getTimelineSourceCollections(log = getCurrentLog()) {
+function getActionSourceCollections(log = getCurrentLog()) {
   return [
     { type: "priority", items: log.topPriorities || [] },
-    { type: "timeline", items: log.timelineItems || [] },
     { type: DAY_OPS_TYPES.contact, items: log.contactItems || [] },
     { type: DAY_OPS_TYPES.schedule121, items: log.scheduleItems || [] },
     { type: DAY_OPS_TYPES.task, items: log.taskItems || [] },
@@ -918,7 +945,7 @@ function getTimelineSourceCollections(log = getCurrentLog()) {
 
 function getAllActionItems(log = getCurrentLog()) {
   const seen = new Set();
-  return getTimelineSourceCollections(log)
+  return getActionSourceCollections(log)
     .flatMap((entry) => entry.items)
     .filter((item) => {
       if (!itemHasContent(item)) {
@@ -931,11 +958,6 @@ function getAllActionItems(log = getCurrentLog()) {
       seen.add(key);
       return true;
     });
-}
-
-function findActionItemById(id, log = getCurrentLog()) {
-  const items = getAllActionItems(log);
-  return items.find((item) => item.id === id) || items.find((item) => item.sourceItemId === id) || null;
 }
 
 function itemHasContent(item) {
@@ -955,27 +977,103 @@ function itemHasContent(item) {
   );
 }
 
-function isItemVisibleToday(item, dateKey = state.currentDateKey) {
-  if (!itemHasContent(item) || item.status === "deleted") {
+function getItemDateKey(item) {
+  return String(item && (item.scheduledDate || item.dueDate || item.sourceDate) ? item.scheduledDate || item.dueDate || item.sourceDate : "");
+}
+
+function isItemDeletedOrArchived(item) {
+  return !item || item.status === "deleted" || item.archived === true;
+}
+
+function isItemCompleted(item) {
+  return Boolean(item && (item.completed || item.status === "done"));
+}
+
+function getPriorityRank(value) {
+  if (value === "high") {
+    return 0;
+  }
+  if (value === "middle") {
+    return 1;
+  }
+  if (value === "low") {
+    return 2;
+  }
+  return 3;
+}
+
+function compareActionItems(left, right) {
+  const leftDate = getItemDateKey(left) || "9999-99-99";
+  const rightDate = getItemDateKey(right) || "9999-99-99";
+  if (leftDate !== rightDate) {
+    return leftDate.localeCompare(rightDate);
+  }
+  const leftPriority = getPriorityRank(left.priority);
+  const rightPriority = getPriorityRank(right.priority);
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+  return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
+}
+
+function getAllActionItemsAcrossLogs() {
+  const byId = new Map();
+  Object.keys(state.dailyLogs)
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((dateKey) => {
+      getAllActionItems(state.dailyLogs[dateKey]).forEach((item) => {
+        byId.set(item.id, item);
+      });
+    });
+  return Array.from(byId.values());
+}
+
+function findActionItemById(id) {
+  const items = getAllActionItemsAcrossLogs();
+  return items.find((item) => item.id === id) || items.find((item) => item.sourceItemId === id) || null;
+}
+
+function isTodayTaskItem(item, dateKey = state.currentDateKey) {
+  if (!itemHasContent(item) || isItemDeletedOrArchived(item)) {
     return false;
   }
-  if (item.postponedTo && item.postponedTo > dateKey) {
+  return getItemDateKey(item) === dateKey;
+}
+
+function isPreviousIncompleteItem(item, dateKey = state.currentDateKey) {
+  if (!itemHasContent(item) || isItemDeletedOrArchived(item) || isItemCompleted(item)) {
     return false;
   }
-  if (item.status === "postponed" && item.scheduledDate !== dateKey) {
-    return false;
-  }
-  return item.scheduledDate === dateKey;
+  const itemDate = getItemDateKey(item);
+  return Boolean(itemDate) && itemDate < dateKey;
+}
+
+function isTaskPageVisibleItem(item, dateKey = state.currentDateKey) {
+  return isTodayTaskItem(item, dateKey) || isPreviousIncompleteItem(item, dateKey);
 }
 
 function itemNeedsReschedule(item, dateKey = state.currentDateKey) {
-  return itemHasContent(item) && !item.completed && item.status !== "deleted" && item.status !== "done" && item.scheduledDate <= dateKey;
+  return isTaskPageVisibleItem(item, dateKey) && !isItemCompleted(item);
+}
+
+function getTodaySectionItems(type, dateKey = state.currentDateKey) {
+  const targetType =
+    type === DAY_OPS_TYPES.contact ? "contact" : type === DAY_OPS_TYPES.schedule121 ? "schedule" : "task";
+  return getAllActionItemsAcrossLogs()
+    .filter((item) => item.type === targetType)
+    .filter((item) => isTodayTaskItem(item, dateKey))
+    .sort(compareActionItems);
+}
+
+function getPreviousIncompleteItems(dateKey = state.currentDateKey) {
+  return getAllActionItemsAcrossLogs()
+    .filter((item) => isPreviousIncompleteItem(item, dateKey))
+    .sort(compareActionItems);
 }
 
 function getTimelineItems(dateKey = state.currentDateKey) {
-  const items = getTimelineSourceCollections(getCurrentLog())
-    .flatMap((entry) => entry.items)
-    .filter((item) => isItemVisibleToday(item, dateKey))
+  const items = getAllActionItemsAcrossLogs()
+    .filter((item) => isTaskPageVisibleItem(item, dateKey))
     .filter((item) => String(item.startTime || "").trim())
     .sort((left, right) => {
       const leftStart = left.startTime || "99:99";
@@ -994,18 +1092,17 @@ function getTimelineItems(dateKey = state.currentDateKey) {
 }
 
 function getUnscheduledTodayItems(dateKey = state.currentDateKey) {
-  return getTimelineSourceCollections(getCurrentLog())
-    .flatMap((entry) => entry.items)
-    .filter((item) => isItemVisibleToday(item, dateKey))
+  return getAllActionItemsAcrossLogs()
+    .filter((item) => isTaskPageVisibleItem(item, dateKey))
     .filter((item) => !String(item.startTime || "").trim());
 }
 
-function getOpenTaskItems(log = getCurrentLog()) {
-  return (log.taskItems || []).filter((item) => item.status !== "deleted" && !(item.completed || item.status === "done"));
+function getOpenTaskItems(items = getTodaySectionItems(DAY_OPS_TYPES.task)) {
+  return items.filter((item) => !isItemDeletedOrArchived(item) && !isItemCompleted(item));
 }
 
-function getCompletedTaskItems(log = getCurrentLog()) {
-  return (log.taskItems || []).filter((item) => item.status !== "deleted" && (item.completed || item.status === "done"));
+function getCompletedTaskItems(items = getTodaySectionItems(DAY_OPS_TYPES.task)) {
+  return items.filter((item) => !isItemDeletedOrArchived(item) && isItemCompleted(item));
 }
 
 function getHandoverCandidates(dateKey = state.currentDateKey) {
@@ -1161,11 +1258,11 @@ function showToast(message) {
 }
 
 function hasUnresolvedDayOps(log = getCurrentLog()) {
-  return getAllActionItems(log).some((item) => itemNeedsReschedule(item));
+  return getAllActionItemsAcrossLogs().some((item) => itemNeedsReschedule(item));
 }
 
 function countUnresolvedDayOps(log = getCurrentLog()) {
-  return getAllActionItems(log).filter((item) => itemNeedsReschedule(item)).length;
+  return getAllActionItemsAcrossLogs().filter((item) => itemNeedsReschedule(item)).length;
 }
 
 function canEnterNight() {
@@ -1174,7 +1271,7 @@ function canEnterNight() {
 
 function buildDefaultTaskSectionState(log = getCurrentLog()) {
   const next = Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
-    const items = getDayOpsBucketByType(log, type);
+    const items = getTodaySectionItems(type);
     accumulator[type] = items.some((item) => itemNeedsReschedule(item)) || DEFAULT_TASK_SECTION_OPEN_STATE[type];
     return accumulator;
   }, {});
@@ -1631,6 +1728,42 @@ function renderTaskHandoffCard() {
     .join("");
 }
 
+function renderPreviousIncompleteSection() {
+  const section = document.getElementById("previous-incomplete-section");
+  const list = document.getElementById("previous-incomplete-list");
+  if (!section || !list) {
+    return;
+  }
+  const items = getPreviousIncompleteItems();
+  section.classList.toggle("hidden", items.length === 0);
+  if (!items.length) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dayops-item status-${getItemStatusClass(item)} previous-task-item" id="previous-item-${item.id}">
+          <div class="dayops-item-header">
+            <div class="dayops-item-content">
+              <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
+              <p>${escapeHtml(getTimelineSubtitle(item) || "")}</p>
+              <div class="dayops-item-meta">
+                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
+                <span class="meta-chip">予定日 ${escapeHtml(getItemDateKey(item) || "未設定")}</span>
+                <span class="meta-chip">${escapeHtml(buildTimelineRange(item))}</span>
+              </div>
+            </div>
+          </div>
+          <div class="dayops-actions">
+            ${buildTaskActionButtons(item, { type: item.type === "schedule" ? DAY_OPS_TYPES.schedule121 : item.type })}
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function calculateProgress() {
   const log = getCurrentLog();
   const gratitudeDone = Object.values(log.gratitude).every((value) => value.trim());
@@ -1772,8 +1905,7 @@ function renderTaskFocusList() {
 }
 
 function renderTaskSection(type, items) {
-  const visibleItems =
-    type === DAY_OPS_TYPES.task ? getOpenTaskItems() : items.filter((item) => item.status !== "deleted");
+  const visibleItems = type === DAY_OPS_TYPES.task ? getOpenTaskItems(items) : items.filter((item) => !isItemDeletedOrArchived(item));
   const article = document.getElementById(`task-section-${type}`);
   const body = document.getElementById(`task-section-body-${type}`);
   const summary = document.getElementById(`task-section-summary-${type}`);
@@ -1837,10 +1969,10 @@ function getDayOpsStatusLabel(status) {
 }
 
 function getItemStatusClass(item) {
-  if (item.completed || item.status === "done") {
+  if (isItemCompleted(item)) {
     return "done";
   }
-  if (item.status === "postponed") {
+  if (item.status === "postponed" && getItemDateKey(item) > state.currentDateKey) {
     return "carryOver";
   }
   return "open";
@@ -1949,7 +2081,7 @@ function buildDayOpsTitle(item) {
 
 function renderDayOpsList(containerId, items, type) {
   const container = document.getElementById(containerId);
-  const visibleItems = type === DAY_OPS_TYPES.task ? getOpenTaskItems() : items.filter((item) => item.status !== "deleted");
+  const visibleItems = type === DAY_OPS_TYPES.task ? getOpenTaskItems(items) : items.filter((item) => !isItemDeletedOrArchived(item));
   if (!visibleItems.length) {
     container.innerHTML = '<div class="dayops-empty">まだ項目はありません。</div>';
     return;
@@ -2066,6 +2198,9 @@ function renderCompletedTaskList() {
 
 function renderDayOps() {
   const log = getCurrentLog();
+  const todayContactItems = getTodaySectionItems(DAY_OPS_TYPES.contact);
+  const todayScheduleItems = getTodaySectionItems(DAY_OPS_TYPES.schedule121);
+  const todayTaskItems = getTodaySectionItems(DAY_OPS_TYPES.task);
   ensureTaskUiState(log);
   syncPrimaryMit(log);
   document.getElementById("contact-date").value = state.dayOpsDrafts.contact.scheduledDate || state.currentDateKey;
@@ -2099,15 +2234,16 @@ function renderDayOps() {
   document.getElementById("global-reschedule-duration").value = state.ui.reschedulingTaskDuration;
   document.getElementById("global-reschedule-panel").classList.toggle("hidden", !state.ui.reschedulingTaskId);
 
-  renderDayOpsList("contact-list", log.contactItems, DAY_OPS_TYPES.contact);
-  renderDayOpsList("schedule121-list", log.scheduleItems, DAY_OPS_TYPES.schedule121);
-  renderDayOpsList("task-list", log.taskItems, DAY_OPS_TYPES.task);
+  renderPreviousIncompleteSection();
+  renderDayOpsList("contact-list", todayContactItems, DAY_OPS_TYPES.contact);
+  renderDayOpsList("schedule121-list", todayScheduleItems, DAY_OPS_TYPES.schedule121);
+  renderDayOpsList("task-list", todayTaskItems, DAY_OPS_TYPES.task);
   renderTaskTimeline();
-  renderTaskSection(DAY_OPS_TYPES.contact, log.contactItems);
-  renderTaskSection(DAY_OPS_TYPES.schedule121, log.scheduleItems);
-  renderTaskSection(DAY_OPS_TYPES.task, log.taskItems);
+  renderTaskSection(DAY_OPS_TYPES.contact, todayContactItems);
+  renderTaskSection(DAY_OPS_TYPES.schedule121, todayScheduleItems);
+  renderTaskSection(DAY_OPS_TYPES.task, todayTaskItems);
   renderTimelineSection();
-  renderCompletedTaskList();
+  renderCompletedTaskList(todayTaskItems);
   toggleToolOtherVisibility("contact", state.dayOpsDrafts.contact.contactTool);
   toggleToolOtherVisibility("schedule121", state.dayOpsDrafts.schedule121.contactTool);
 
@@ -2147,6 +2283,33 @@ function formatDayOpsPreview(items) {
     .join(" / ");
 }
 
+function getLogActionItems(dateKey) {
+  return getAllActionItemsAcrossLogs()
+    .filter((item) => isTaskPageVisibleItem(item, dateKey))
+    .sort(compareActionItems);
+}
+
+function buildLogTaskRows(items, done) {
+  if (!items.length) {
+    return '<p class="inline-note">該当するタスクはありません。</p>';
+  }
+  return items
+    .map((item) => {
+      const scheduleMeta = buildScheduleMetaLine(item) || "予定未設定";
+      const completedMeta = done ? ` / 完了 ${formatCompletedAtTime(item.completedAt) || "記録なし"}` : "";
+      return `
+        <article class="log-task-row ${done ? "is-done" : "is-open"}">
+          <span class="log-task-icon" aria-hidden="true">${done ? "✓" : "□"}</span>
+          <div class="log-task-copy">
+            <strong>${escapeHtml(buildDayOpsTitle(item))}</strong>
+            <p>${escapeHtml(getTaskTypeLabel(item))} / ${escapeHtml(scheduleMeta)}${escapeHtml(completedMeta)}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderLogs() {
   const list = document.getElementById("logs-list");
   const dateKeys = Object.keys(state.dailyLogs).sort((a, b) => b.localeCompare(a));
@@ -2170,9 +2333,12 @@ function renderLogs() {
   }
 
   title.textContent = `${log.date} のログ`;
+  const logItems = getLogActionItems(log.date);
+  const completedItems = logItems.filter((item) => isItemCompleted(item));
+  const incompleteItems = logItems.filter((item) => !isItemCompleted(item));
   detail.innerHTML = `
     <div class="log-detail-block">
-      <strong>Boot Sequence</strong>
+      <strong>LIFE GOAL</strong>
       <p>Mission Statement: ${log.bootSequence.missionStatement.completed ? "完了" : "未完了"}</p>
       <p>10m Time Machine: ${log.bootSequence.timeMachine10m.completed ? "完了" : "未完了"}</p>
     </div>
@@ -2181,11 +2347,16 @@ function renderLogs() {
       ${(log.topPriorities || []).map((item) => `<p>${escapeHtml(item.title || "未入力")} / ${escapeHtml(buildTimelineRange(item))}</p>`).join("")}
     </div>
     <div class="log-detail-block">
-      <strong>タスク</strong>
-      <p>連絡: ${escapeHtml(formatDayOpsPreview(log.contactItems || []))}</p>
-      <p>日程調整: ${escapeHtml(formatDayOpsPreview(log.scheduleItems || []))}</p>
-      <p>タスク: ${escapeHtml(formatDayOpsPreview(log.taskItems || []))}</p>
-      <p>メモ: ${escapeHtml(log.dayOps.expenseMemo || "未入力")}</p>
+      <strong>完了したタスク</strong>
+      <div class="log-task-group">
+        ${buildLogTaskRows(completedItems, true)}
+      </div>
+    </div>
+    <div class="log-detail-block">
+      <strong>未完了のタスク</strong>
+      <div class="log-task-group">
+        ${buildLogTaskRows(incompleteItems, false)}
+      </div>
     </div>
     <div class="log-detail-block">
       <strong>明日のNEXT ACTION</strong>
@@ -2302,7 +2473,7 @@ function buildMarkdown(log) {
     "",
     `## ${log.date}`,
     "",
-    "## Boot",
+    "## LIFE GOAL",
     "",
     "### Mission Statement",
     `- [${mark(log.bootSequence.missionStatement.readAloud)}] すべて声に出して読んだ`,
@@ -2516,11 +2687,7 @@ function openRoutineLink(type, key) {
 
   const url = state.settings.links[item.linkKey];
   if (!url) {
-    if (item.linkKey === "morningNewsShortcut") {
-      showToast("今朝のニュース用ショートカットを設定してください");
-    } else {
-      showToast("リンクが未設定です");
-    }
+    showToast("リンクが未設定です");
     return;
   }
 
@@ -2536,11 +2703,6 @@ function openRoutineLink(type, key) {
     renderRoutineList("night-routine-list", NIGHT_ROUTINE_ITEMS, log.nightRoutine, "night");
   }
   updateProgressUi();
-  if (item.linkKey === "morningNewsShortcut" || url.startsWith("shortcuts://")) {
-    window.location.href = url;
-    showToast("ショートカットを起動しました");
-    return;
-  }
   window.open(url, "_blank", "noopener,noreferrer");
   showToast("リンクを開き、チェックしました");
 }
@@ -2660,7 +2822,7 @@ function getDayOpsBucketByType(log, type) {
 }
 
 function findItemById(id, log = getCurrentLog()) {
-  const pools = [
+  const localPools = [
     ...(log.topPriorities || []),
     ...(log.handoverItems || []),
     ...(log.timelineItems || []),
@@ -2668,7 +2830,11 @@ function findItemById(id, log = getCurrentLog()) {
     ...(log.scheduleItems || []),
     ...(log.taskItems || []),
   ];
-  return pools.find((item) => item.id === id) || pools.find((item) => item.sourceItemId === id) || null;
+  const localMatch = localPools.find((item) => item.id === id) || localPools.find((item) => item.sourceItemId === id);
+  if (localMatch) {
+    return localMatch;
+  }
+  return findActionItemById(id);
 }
 
 function findSourceItemById(sourceId) {
@@ -2737,7 +2903,7 @@ function postponeItemToTomorrow(id) {
   const target = findItemById(id);
   target.completed = false;
   target.completedAt = null;
-  target.status = "postponed";
+  target.status = "todo";
   target.postponedFrom = state.currentDateKey;
   target.postponedTo = tomorrow;
   target.updatedAt = new Date().toISOString();
@@ -2746,7 +2912,7 @@ function postponeItemToTomorrow(id) {
     if (source) {
       source.completed = false;
       source.completedAt = null;
-      source.status = "postponed";
+      source.status = "todo";
       source.postponedFrom = state.currentDateKey;
       source.postponedTo = tomorrow;
       source.updatedAt = target.updatedAt;
