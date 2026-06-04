@@ -2007,7 +2007,7 @@ function renderTaskSection(type, items) {
   const toggleButton = article.querySelector(`[data-task-form-toggle="${type}"]`);
   const unresolvedCount = visibleItems.filter((item) => itemNeedsReschedule(item)).length;
   const formOpen = Boolean(state.ui.taskForms[type]);
-  const sectionOpen = formOpen || (Boolean(state.ui.taskSections[type]) && (visibleItems.length > 0 || unresolvedCount > 0));
+  const sectionOpen = formOpen || Boolean(state.ui.taskSections[type]);
   article.classList.toggle("has-items", visibleItems.length > 0);
   article.classList.toggle("has-unresolved", unresolvedCount > 0);
   article.classList.toggle("is-open", sectionOpen);
