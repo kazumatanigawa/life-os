@@ -53,19 +53,9 @@
 
             <div class="mission-cards" id="mission-cards"></div>
 
-            <div class="card check-card ritual-card">
-              <label class="toggle-card">
-                <input type="checkbox" id="mission-readaloud" />
-                <span class="toggle-indicator"></span>
-                <span class="toggle-copy">すべて声に出して読んだ</span>
-              </label>
-              <label class="toggle-card">
-                <input type="checkbox" id="mission-principles" />
-                <span class="toggle-indicator"></span>
-                <span class="toggle-copy">今日もこの原則で生きる</span>
-              </label>
+            <div class="card check-card ritual-card mission-action-card">
               <div class="action-row">
-                <button class="primary-button" id="mission-next-button" type="button">声に出して読んだ</button>
+                <button class="primary-button" id="mission-next-button" type="button">今日もこの原則で生きる</button>
               </div>
             </div>
           </div>
@@ -74,6 +64,10 @@
             <div class="section-heading time-machine-heading">
               <h3>10mタイムマシン</h3>
             </div>
+            <div class="card future-self-card">
+              <p class="future-self-label" id="time-machine-future-label">2029-6-4の未来の私</p>
+            </div>
+            <div class="time-machine-history-stack hidden" id="time-machine-history-stack"></div>
             <div class="card timer-card">
               <div class="timer-face" id="timer-display">10:00</div>
               <button class="primary-button" id="timer-start-button" type="button">タイマー開始</button>
@@ -82,16 +76,6 @@
             <div class="card-grid" id="time-machine-fields"></div>
 
             <div class="card check-card ritual-card">
-              <label class="toggle-card">
-                <input type="checkbox" id="tm-visualized" />
-                <span class="toggle-indicator"></span>
-                <span class="toggle-copy">3年後の未来を具体的に想像した</span>
-              </label>
-              <label class="toggle-card">
-                <input type="checkbox" id="tm-action-visible" />
-                <span class="toggle-indicator"></span>
-                <span class="toggle-copy">今日やるべき一手が見えた</span>
-              </label>
               <div class="action-row">
                 <button class="primary-button" id="time-machine-complete-button" type="button">今日をはじめる</button>
               </div>
@@ -150,8 +134,8 @@
                       <input id="priority-1-start" type="time" />
                     </label>
                     <label>
-                      <span>終了</span>
-                      <input id="priority-1-end" type="time" />
+                      <span>所要時間(分)</span>
+                      <input id="priority-1-duration" type="number" min="1" inputmode="numeric" placeholder="60" />
                     </label>
                   </div>
                   <label>
@@ -174,8 +158,8 @@
                       <input id="priority-2-start" type="time" />
                     </label>
                     <label>
-                      <span>終了</span>
-                      <input id="priority-2-end" type="time" />
+                      <span>所要時間(分)</span>
+                      <input id="priority-2-duration" type="number" min="1" inputmode="numeric" placeholder="60" />
                     </label>
                   </div>
                   <label>
@@ -198,8 +182,8 @@
                       <input id="priority-3-start" type="time" />
                     </label>
                     <label>
-                      <span>終了</span>
-                      <input id="priority-3-end" type="time" />
+                      <span>所要時間(分)</span>
+                      <input id="priority-3-duration" type="number" min="1" inputmode="numeric" placeholder="60" />
                     </label>
                   </div>
                   <label>
@@ -584,6 +568,17 @@
                 <h3>本文編集</h3>
               </div>
               <div id="settings-mission-fields" class="settings-fields"></div>
+            </article>
+
+            <article class="card">
+              <div class="section-heading">
+                <p class="section-kicker">Profile</p>
+                <h3>誕生日</h3>
+              </div>
+              <label class="settings-field">
+                <span>誕生日</span>
+                <input id="settings-user-birthday" data-settings-profile="userBirthday" type="date" />
+              </label>
             </article>
 
             <article class="card">

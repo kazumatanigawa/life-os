@@ -2,6 +2,7 @@ const STORAGE_KEYS = {
   appState: "lifeOS_appState",
   dailyLogs: "lifeOS_dailyLogs",
   settings: "lifeOS_settings",
+  timeMachineVisions: "lifeOS_timeMachineVisions",
 };
 
 const APP_VERSION = "2026-06-03-life-goal-carryover";
@@ -41,7 +42,7 @@ const DAY_OPS_TYPE_CONFIG = {
 const DEFAULT_TASK_SECTION_OPEN_STATE = {
   [DAY_OPS_TYPES.contact]: true,
   [DAY_OPS_TYPES.schedule121]: true,
-  [DAY_OPS_TYPES.task]: true,
+  [DAY_OPS_TYPES.task]: false,
   [TASK_TIMELINE_SECTION]: true,
 };
 
@@ -85,15 +86,14 @@ const NIGHT_ROUTINE_ITEMS = [
 ];
 
 const TIME_MACHINE_FIELDS = [
-  { key: "abilities", label: "何ができるようになっているか" },
-  { key: "priorities", label: "何を重視しているか" },
-  { key: "appearance", label: "どんな見た目をしているか" },
-  { key: "influence", label: "誰にどんな影響を与えているか" },
-  { key: "place", label: "どこにいるか" },
+  { key: "worksAndBusiness", label: "どんな作品・事業を生み出しているか" },
+  { key: "solvedProblems", label: "誰のどんなお困りごとを解決しているか" },
   { key: "incomeStructure", label: "どんな収入構造を持っているか" },
-  { key: "artAndBusiness", label: "どんな作品・事業を生み出しているか" },
-  { key: "messageFromFutureSelf", label: "3年後の自分から今日の自分への一言" },
-  { key: "todayActionFromFuture", label: "未来から逆算した今日の最重要アクション" },
+  { key: "socialImpact", label: "周囲にどのような影響を与えているか" },
+  { key: "coreValue", label: "最も重視しているものは何か" },
+  { key: "appearanceAndExpression", label: "どんな見た目と表情か" },
+  { key: "messageFromFuture", label: "3年後の自分から今の自分への一言" },
+  { key: "todayMostImportantAction", label: "未来から逆算した今日の最重要アクション" },
 ];
 
 const LINK_DEFINITIONS = [
@@ -111,6 +111,7 @@ const LINK_DEFINITIONS = [
 
 const DEFAULT_SETTINGS = {
   missionStatement: Object.fromEntries(MISSION_SECTIONS.map((section) => [section.key, section.value])),
+  userBirthday: "",
   bootSequence: {
     showOnLaunch: true,
     showEveryOpen: true,
@@ -147,6 +148,7 @@ const state = {
   activeScreen: "boot",
   bootStep: "mission",
   bootUnlocked: false,
+  timeMachineVisions: [],
   timerIntervalId: null,
   timerRemainingSeconds: 600,
   output: {
@@ -585,15 +587,14 @@ function hydrateFutureVision(savedFutureVision) {
 
   return {
     ...defaults,
-    abilities: saved.abilities || "",
-    priorities: saved.priorities || "",
-    appearance: appearanceParts.join(" / "),
-    influence: saved.influence || "",
-    place: saved.place || "",
+    worksAndBusiness: saved.worksAndBusiness || saved.artAndBusiness || "",
+    solvedProblems: saved.solvedProblems || "",
     incomeStructure: saved.incomeStructure || "",
-    artAndBusiness: saved.artAndBusiness || "",
-    messageFromFutureSelf: saved.messageFromFutureSelf || "",
-    todayActionFromFuture: saved.todayActionFromFuture || "",
+    socialImpact: saved.socialImpact || saved.influence || "",
+    coreValue: saved.coreValue || saved.priorities || "",
+    appearanceAndExpression: saved.appearanceAndExpression || appearanceParts.join(" / "),
+    messageFromFuture: saved.messageFromFuture || saved.messageFromFutureSelf || "",
+    todayMostImportantAction: saved.todayMostImportantAction || saved.todayActionFromFuture || "",
   };
 }
 
@@ -606,7 +607,7 @@ function hydratePriorityItem(dateKey, savedItem, index) {
       description: saved.description || "",
       scheduledDate: saved.scheduledDate || dateKey,
       startTime: saved.startTime || "",
-      endTime: saved.endTime || "",
+      endTime: computeEndTime(saved.startTime || "", normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime)),
       durationMinutes: normalizeDurationMinutes(saved.durationMinutes) || computeDurationMinutes(saved.startTime, saved.endTime),
       completed: Boolean(saved.completed),
       completedAt: saved.completedAt || null,
@@ -622,7 +623,7 @@ function hydratePriorityItem(dateKey, savedItem, index) {
 function buildPrioritiesFromLegacyLog(dateKey, savedLog, futureVision) {
   const legacyMit = savedLog && savedLog.mit ? savedLog.mit : {};
   return [
-    hydratePriorityItem(dateKey, { title: futureVision.todayActionFromFuture || legacyMit.mit1 || "" }, 0),
+    hydratePriorityItem(dateKey, { title: futureVision.todayMostImportantAction || legacyMit.mit1 || "" }, 0),
     hydratePriorityItem(dateKey, { title: legacyMit.mit2 || "" }, 1),
     hydratePriorityItem(dateKey, { title: legacyMit.mit3 || "" }, 2),
   ];
@@ -678,7 +679,7 @@ function hydrateDailyLog(dateKey, savedLog) {
 }
 
 function syncPrimaryMit(log = getCurrentLog()) {
-  const firstTitle = log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture || "";
+  const firstTitle = log.bootSequence.timeMachine10m.futureVision.todayMostImportantAction || "";
   if (!Array.isArray(log.topPriorities) || !log.topPriorities.length) {
     log.topPriorities = createDefaultPriorityItems(log.date);
   }
@@ -706,6 +707,58 @@ function getTomorrowDateKey(dateKey = state.currentDateKey || getDateKey()) {
   const date = new Date(`${dateKey}T00:00:00`);
   date.setDate(date.getDate() + 1);
   return getDateKey(date);
+}
+
+function getThreeYearsLaterDateKey(dateKey = state.currentDateKey || getDateKey()) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setFullYear(date.getFullYear() + 3);
+  return getDateKey(date);
+}
+
+function formatLooseDateLabel(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function calculateAgeOnDate(birthday, targetDateKey) {
+  if (!birthday || !targetDateKey) {
+    return null;
+  }
+  const birth = new Date(`${birthday}T00:00:00`);
+  const target = new Date(`${targetDateKey}T00:00:00`);
+  if (Number.isNaN(birth.getTime()) || Number.isNaN(target.getTime())) {
+    return null;
+  }
+  let age = target.getFullYear() - birth.getFullYear();
+  const targetMonthDay = (target.getMonth() + 1) * 100 + target.getDate();
+  const birthMonthDay = (birth.getMonth() + 1) * 100 + birth.getDate();
+  if (targetMonthDay < birthMonthDay) {
+    age -= 1;
+  }
+  return age >= 0 ? age : null;
+}
+
+function buildFutureSelfLabel(dateKey = state.currentDateKey || getDateKey()) {
+  const targetDateKey = getThreeYearsLaterDateKey(dateKey);
+  const age = calculateAgeOnDate(state.settings.userBirthday, targetDateKey);
+  if (age === null) {
+    return `${formatLooseDateLabel(targetDateKey)}の未来の私`;
+  }
+  return `${formatLooseDateLabel(targetDateKey)}の${age}歳の私`;
+}
+
+function getMatchingTimeMachineVisions(dateKey = state.currentDateKey || getDateKey()) {
+  return (state.timeMachineVisions || []).filter((entry) => entry.targetDate === dateKey);
+}
+
+function storeCurrentTimeMachineVision() {
+  const log = getCurrentLog();
+  const entry = {
+    createdDate: state.currentDateKey,
+    targetDate: getThreeYearsLaterDateKey(state.currentDateKey),
+    answers: mergeWithDefaults(createDefaultFutureVision(), log.bootSequence.timeMachine10m.futureVision),
+  };
+  state.timeMachineVisions.push(entry);
 }
 
 function formatDateLabel(dateKey) {
@@ -802,6 +855,21 @@ function loadDailyLogs(savedLogs = null) {
   return hydrated;
 }
 
+function loadTimeMachineVisions(savedVisions = null) {
+  const raw = savedVisions || loadJson(STORAGE_KEYS.timeMachineVisions, []);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      createdDate: String(entry.createdDate || ""),
+      targetDate: String(entry.targetDate || ""),
+      answers: mergeWithDefaults(createDefaultFutureVision(), entry.answers || {}),
+    }))
+    .filter((entry) => entry.createdDate && entry.targetDate);
+}
+
 function loadAppState() {
   const stored = loadJson(STORAGE_KEYS.appState, null);
   if (stored && stored.dailyData) {
@@ -809,6 +877,7 @@ function loadAppState() {
       settings: loadSettings(stored.settings || null),
       dailyLogs: loadDailyLogs(stored.dailyData || {}),
       appMeta: mergeWithDefaults(createDefaultAppMeta(), stored),
+      timeMachineVisions: loadTimeMachineVisions(stored.timeMachineVisions || null),
     };
   }
 
@@ -816,6 +885,7 @@ function loadAppState() {
     settings: loadSettings(),
     dailyLogs: loadDailyLogs(),
     appMeta: createDefaultAppMeta(),
+    timeMachineVisions: loadTimeMachineVisions(),
   };
 }
 
@@ -846,11 +916,13 @@ function saveAppState(showToastMessage = false) {
       ...state.appMeta,
       settings: state.settings,
       dailyData: state.dailyLogs,
+      timeMachineVisions: state.timeMachineVisions,
     };
 
     saveJson(STORAGE_KEYS.appState, payload);
     saveJson(STORAGE_KEYS.settings, state.settings);
     saveJson(STORAGE_KEYS.dailyLogs, state.dailyLogs);
+    saveJson(STORAGE_KEYS.timeMachineVisions, state.timeMachineVisions);
     state.saveState.status = "saved";
     renderSaveStatus();
     if (showToastMessage) {
@@ -1235,6 +1307,7 @@ function initializeState() {
   state.settings = loaded.settings;
   state.dailyLogs = loaded.dailyLogs;
   state.appMeta = loaded.appMeta;
+  state.timeMachineVisions = loaded.timeMachineVisions || [];
   state.currentDateKey = getDateKey();
   ensureCurrentLog();
   ensureTaskUiState();
@@ -1272,6 +1345,10 @@ function canEnterNight() {
 function buildDefaultTaskSectionState(log = getCurrentLog()) {
   const next = Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
     const items = getTodaySectionItems(type);
+    if (type === DAY_OPS_TYPES.task) {
+      accumulator[type] = DEFAULT_TASK_SECTION_OPEN_STATE[type];
+      return accumulator;
+    }
     accumulator[type] = items.some((item) => itemNeedsReschedule(item)) || DEFAULT_TASK_SECTION_OPEN_STATE[type];
     return accumulator;
   }, {});
@@ -1571,14 +1648,14 @@ function setBootUnlocked() {
 
 function updateMissionCompletion() {
   const mission = getCurrentLog().bootSequence.missionStatement;
-  const canComplete = mission.liveByPrinciples && (!state.settings.bootSequence.requireReadAloud || mission.readAloud);
+  const canComplete = mission.readAloud || mission.liveByPrinciples || mission.completed;
   mission.completed = canComplete;
   mission.completedAt = canComplete ? mission.completedAt || new Date().toISOString() : null;
 }
 
-function updateTimeMachineCompletion() {
+function updateTimeMachineCompletion(forceComplete = false) {
   const timeMachine = getCurrentLog().bootSequence.timeMachine10m;
-  const canComplete = timeMachine.visualizedFuture && timeMachine.actionVisible;
+  const canComplete = forceComplete || timeMachine.completed;
   timeMachine.completed = canComplete;
   timeMachine.completedAt = canComplete ? timeMachine.completedAt || new Date().toISOString() : null;
   timeMachine.timerSecondsUsed = Math.min(600, 600 - state.timerRemainingSeconds);
@@ -1600,18 +1677,48 @@ function renderMissionCards() {
 function renderTimeMachineFields() {
   const futureVision = getCurrentLog().bootSequence.timeMachine10m.futureVision;
   const container = document.getElementById("time-machine-fields");
+  const futureLabel = document.getElementById("time-machine-future-label");
+  const historyStack = document.getElementById("time-machine-history-stack");
   container.innerHTML = TIME_MACHINE_FIELDS.map(
     (field) => `
       <label class="card settings-field">
         <span>${escapeHtml(field.label)}</span>
         <textarea
           data-time-machine-field="${field.key}"
-          rows="${field.key === "todayActionFromFuture" || field.key === "messageFromFutureSelf" ? 4 : 3}"
+          rows="${field.key === "todayMostImportantAction" || field.key === "messageFromFuture" ? 4 : 3}"
           placeholder="${escapeHtml(field.label)}"
         >${escapeHtml(futureVision[field.key] || "")}</textarea>
       </label>
     `
   ).join("");
+  if (futureLabel) {
+    futureLabel.textContent = buildFutureSelfLabel();
+  }
+  if (historyStack) {
+    const visions = getMatchingTimeMachineVisions();
+    historyStack.classList.toggle("hidden", visions.length === 0);
+    historyStack.innerHTML = visions
+      .map(
+        (vision) => `
+          <article class="card time-machine-history-card">
+            <div class="section-heading">
+              <h4>3年前の私はこんなことを想像していた。</h4>
+            </div>
+            <div class="time-machine-history-list">
+              ${TIME_MACHINE_FIELDS.map(
+                (field) => `
+                  <div class="time-machine-history-item">
+                    <strong>${escapeHtml(field.label)}</strong>
+                    <p>${escapeHtml(vision.answers[field.key] || "未入力")}</p>
+                  </div>
+                `
+              ).join("")}
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
 }
 
 function toggleCheckedClass(input) {
@@ -1635,18 +1742,9 @@ function updateTimerUi() {
 function renderBootState() {
   const log = getCurrentLog();
   updateMissionCompletion();
-  updateTimeMachineCompletion();
-
-  document.getElementById("mission-readaloud").checked = log.bootSequence.missionStatement.readAloud;
-  document.getElementById("mission-principles").checked = log.bootSequence.missionStatement.liveByPrinciples;
-  document.getElementById("mission-next-button").disabled = !log.bootSequence.missionStatement.completed;
   document.getElementById("timer-start-button").disabled = Boolean(state.timerIntervalId) || state.timerRemainingSeconds <= 0;
-  document.getElementById("tm-visualized").checked = log.bootSequence.timeMachine10m.visualizedFuture;
-  document.getElementById("tm-action-visible").checked = log.bootSequence.timeMachine10m.actionVisible;
-  document.getElementById("time-machine-complete-button").disabled = !log.bootSequence.timeMachine10m.completed;
 
   updateTimerUi();
-  document.querySelectorAll("#boot-screen input[type='checkbox']").forEach(toggleCheckedClass);
   document.querySelector(".boot-hero").classList.toggle("hidden", state.bootStep === "timeMachine");
   document.getElementById("mission-view").classList.toggle("hidden", state.bootStep !== "mission");
   document.getElementById("time-machine-view").classList.toggle("hidden", state.bootStep !== "timeMachine");
@@ -1848,7 +1946,7 @@ function renderToday() {
     const order = index + 1;
     const title = document.getElementById(`priority-${order}-title`);
     const start = document.getElementById(`priority-${order}-start`);
-    const end = document.getElementById(`priority-${order}-end`);
+    const duration = document.getElementById(`priority-${order}-duration`);
     const memo = document.getElementById(`priority-${order}-memo`);
     if (title) {
       title.value = item.title || "";
@@ -1856,8 +1954,8 @@ function renderToday() {
     if (start) {
       start.value = item.startTime || "";
     }
-    if (end) {
-      end.value = item.endTime || "";
+    if (duration) {
+      duration.value = item.durationMinutes || "";
     }
     if (memo) {
       memo.value = item.memo || "";
@@ -2403,6 +2501,11 @@ function renderSettings() {
       </label>
     `
   ).join("");
+
+  const birthdayInput = document.getElementById("settings-user-birthday");
+  if (birthdayInput) {
+    birthdayInput.value = state.settings.userBirthday || "";
+  }
 }
 
 function renderOutputPanel() {
@@ -2480,15 +2583,14 @@ function buildMarkdown(log) {
     `- [${mark(log.bootSequence.missionStatement.liveByPrinciples)}] 今日もこの原則で生きる`,
     "",
     "### 10mタイムマシン",
-    `- できるようになったこと: ${log.bootSequence.timeMachine10m.futureVision.abilities}`,
-    `- 重視していること: ${log.bootSequence.timeMachine10m.futureVision.priorities}`,
-    `- 見た目: ${log.bootSequence.timeMachine10m.futureVision.appearance}`,
-    `- 影響: ${log.bootSequence.timeMachine10m.futureVision.influence}`,
-    `- どこにいるか: ${log.bootSequence.timeMachine10m.futureVision.place}`,
+    `- どんな作品・事業を生み出しているか: ${log.bootSequence.timeMachine10m.futureVision.worksAndBusiness}`,
+    `- 誰のどんなお困りごとを解決しているか: ${log.bootSequence.timeMachine10m.futureVision.solvedProblems}`,
     `- 収入構造: ${log.bootSequence.timeMachine10m.futureVision.incomeStructure}`,
-    `- 作品・事業: ${log.bootSequence.timeMachine10m.futureVision.artAndBusiness}`,
-    `- 未来の自分からの一言: ${log.bootSequence.timeMachine10m.futureVision.messageFromFutureSelf}`,
-    `- 今日の最重要アクション: ${log.bootSequence.timeMachine10m.futureVision.todayActionFromFuture}`,
+    `- 周囲への影響: ${log.bootSequence.timeMachine10m.futureVision.socialImpact}`,
+    `- 最も重視しているもの: ${log.bootSequence.timeMachine10m.futureVision.coreValue}`,
+    `- 見た目と表情: ${log.bootSequence.timeMachine10m.futureVision.appearanceAndExpression}`,
+    `- 3年後の自分から今の自分への一言: ${log.bootSequence.timeMachine10m.futureVision.messageFromFuture}`,
+    `- 未来から逆算した今日の最重要アクション: ${log.bootSequence.timeMachine10m.futureVision.todayMostImportantAction}`,
     "",
     "## Week Goal",
     `- ${log.weekGoal}`,
@@ -3007,6 +3109,11 @@ function handleClick(event) {
   const target = event.target.closest("button, [data-log-date]") || event.target;
 
   if (target.id === "mission-next-button") {
+    const mission = getCurrentLog().bootSequence.missionStatement;
+    mission.readAloud = true;
+    mission.liveByPrinciples = true;
+    mission.completed = true;
+    mission.completedAt = mission.completedAt || new Date().toISOString();
     persistDailyLogs(true);
     if (state.settings.bootSequence.requireTimeMachine) {
       state.bootStep = "timeMachine";
@@ -3020,7 +3127,11 @@ function handleClick(event) {
   }
 
   if (target.id === "time-machine-complete-button") {
-    updateTimeMachineCompletion();
+    const timeMachine = getCurrentLog().bootSequence.timeMachine10m;
+    timeMachine.visualizedFuture = true;
+    timeMachine.actionVisible = true;
+    updateTimeMachineCompletion(true);
+    storeCurrentTimeMachineVision();
     persistDailyLogs(true);
     setBootUnlocked();
     return;
@@ -3194,38 +3305,6 @@ function handleChange(event) {
   const target = event.target;
   const log = getCurrentLog();
 
-  if (target.id === "mission-readaloud") {
-    log.bootSequence.missionStatement.readAloud = target.checked;
-    updateMissionCompletion();
-    persistDailyLogs(true);
-    renderBootState();
-    return;
-  }
-
-  if (target.id === "mission-principles") {
-    log.bootSequence.missionStatement.liveByPrinciples = target.checked;
-    updateMissionCompletion();
-    persistDailyLogs(true);
-    renderBootState();
-    return;
-  }
-
-  if (target.id === "tm-visualized") {
-    log.bootSequence.timeMachine10m.visualizedFuture = target.checked;
-    updateTimeMachineCompletion();
-    persistDailyLogs(true);
-    renderBootState();
-    return;
-  }
-
-  if (target.id === "tm-action-visible") {
-    log.bootSequence.timeMachine10m.actionVisible = target.checked;
-    updateTimeMachineCompletion();
-    persistDailyLogs(true);
-    renderBootState();
-    return;
-  }
-
   if (target.dataset.routineType) {
     const bucket = target.dataset.routineType === "morning" ? log.morningRoutine : log.nightRoutine;
     bucket[target.dataset.routineKey] = target.checked;
@@ -3268,6 +3347,12 @@ function handleChange(event) {
     toggleCheckedClass(target);
     return;
   }
+
+  if (target.dataset.settingsProfile) {
+    state.settings[target.dataset.settingsProfile] = target.value;
+    persistSettingsImmediate(false);
+    return;
+  }
 }
 
 function handleInput(event) {
@@ -3277,17 +3362,22 @@ function handleInput(event) {
     return;
   }
 
-  const priorityMatch = target.id.match(/^priority-(\d+)-(title|start|end|memo)$/);
+  const priorityMatch = target.id.match(/^priority-(\d+)-(title|start|duration|memo)$/);
   if (priorityMatch) {
     const item = getCurrentLog().topPriorities[Number(priorityMatch[1]) - 1];
     if (item) {
-      const fieldMap = {
-        title: "title",
-        start: "startTime",
-        end: "endTime",
-        memo: "memo",
-      };
-      item[fieldMap[priorityMatch[2]]] = target.value;
+      const field = priorityMatch[2];
+      if (field === "title") {
+        item.title = target.value;
+      } else if (field === "start") {
+        item.startTime = target.value;
+        item.endTime = computeEndTime(target.value, item.durationMinutes);
+      } else if (field === "duration") {
+        item.durationMinutes = normalizeDurationMinutes(target.value);
+        item.endTime = computeEndTime(item.startTime, item.durationMinutes);
+      } else if (field === "memo") {
+        item.memo = target.value;
+      }
       if (Number(priorityMatch[1]) === 2) {
         getCurrentLog().mit.mit2 = getCurrentLog().topPriorities[1].title;
       }
@@ -3301,7 +3391,7 @@ function handleInput(event) {
 
   if (target.dataset.timeMachineField) {
     getCurrentLog().bootSequence.timeMachine10m.futureVision[target.dataset.timeMachineField] = target.value;
-    if (target.dataset.timeMachineField === "todayActionFromFuture") {
+    if (target.dataset.timeMachineField === "todayMostImportantAction") {
       syncPrimaryMit(getCurrentLog());
       document.getElementById("priority-1-title").value = getCurrentLog().topPriorities[0].title;
     }

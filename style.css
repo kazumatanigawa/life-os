@@ -226,6 +226,51 @@ select:focus {
     var(--card);
 }
 
+.future-self-card {
+  padding: 1rem 1.2rem;
+  background:
+    linear-gradient(145deg, rgba(81, 66, 20, 0.3), rgba(18, 24, 38, 0.78)),
+    var(--card);
+  border-color: rgba(212, 175, 55, 0.32);
+}
+
+.future-self-label {
+  margin: 0;
+  color: #fff1bf;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  letter-spacing: 0.02em;
+}
+
+.time-machine-history-stack,
+.time-machine-history-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.time-machine-history-card {
+  background:
+    linear-gradient(145deg, rgba(26, 41, 67, 0.7), rgba(14, 21, 34, 0.88)),
+    var(--card);
+}
+
+.time-machine-history-item {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 138, 168, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.time-machine-history-item strong {
+  color: #f5f8ff;
+}
+
+.time-machine-history-item p {
+  margin: 0;
+}
+
 .night-card {
   background:
     linear-gradient(180deg, rgba(92, 120, 216, 0.08), rgba(255, 255, 255, 0.015)),
@@ -2078,11 +2123,11 @@ body.nav-visible .save-fab {
   #priority-2-title,
   #priority-3-title,
   #priority-1-start,
-  #priority-1-end,
+  #priority-1-duration,
   #priority-2-start,
-  #priority-2-end,
+  #priority-2-duration,
   #priority-3-start,
-  #priority-3-end,
+  #priority-3-duration,
   #priority-1-memo,
   #priority-2-memo,
   #priority-3-memo {
