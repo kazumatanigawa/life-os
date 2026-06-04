@@ -1467,13 +1467,15 @@ function startTaskReschedule(id, options = {}) {
   state.ui.reschedulingTaskDuration = String(getItemDurationMinutes(item) || "");
   if (options.fromTimeline) {
     const section = getTaskSectionForItem(item);
+    state.ui.taskSections[TASK_TIMELINE_SECTION] = true;
     if (section) {
       state.ui.taskSections[section] = true;
-      state.ui.taskSections[TASK_TIMELINE_SECTION] = true;
       if (section === DAY_OPS_TYPES.task) {
         state.ui.expandedTaskItems[id] = true;
       }
       state.ui.pendingScrollTargetId = `dayops-item-${id}`;
+    } else if (item.type === "priority") {
+      state.ui.pendingScrollTargetId = "global-reschedule-panel";
     }
   } else {
     state.ui.taskSections.task = true;
@@ -2121,8 +2123,7 @@ function buildTaskActionButtons(item, options = {}) {
   const includeDelete = Boolean(options.includeDelete);
   const type = options.type || item.type || DAY_OPS_TYPES.task;
   const fromTimeline = Boolean(options.fromTimeline);
-  const rescheduleAttr =
-    fromTimeline && getTaskSectionForItem(item) ? `data-item-timeline-reschedule="${item.id}"` : `data-item-reschedule="${item.id}"`;
+  const rescheduleAttr = fromTimeline ? `data-item-timeline-reschedule="${item.id}"` : `data-item-reschedule="${item.id}"`;
   const deleteAction = includeDelete
     ? `<button class="action-button action-delete" data-dayops-delete="${type}:${item.id}" type="button">削除</button>`
     : "";
