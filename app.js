@@ -40,8 +40,8 @@ const DAY_OPS_TYPE_CONFIG = {
 };
 
 const DEFAULT_TASK_SECTION_OPEN_STATE = {
-  [DAY_OPS_TYPES.contact]: true,
-  [DAY_OPS_TYPES.schedule121]: true,
+  [DAY_OPS_TYPES.contact]: false,
+  [DAY_OPS_TYPES.schedule121]: false,
   [DAY_OPS_TYPES.task]: false,
   [TASK_TIMELINE_SECTION]: true,
 };
@@ -1344,12 +1344,7 @@ function canEnterNight() {
 
 function buildDefaultTaskSectionState(log = getCurrentLog()) {
   const next = Object.keys(DAY_OPS_TYPE_CONFIG).reduce((accumulator, type) => {
-    const items = getTodaySectionItems(type);
-    if (type === DAY_OPS_TYPES.task) {
-      accumulator[type] = DEFAULT_TASK_SECTION_OPEN_STATE[type];
-      return accumulator;
-    }
-    accumulator[type] = items.some((item) => itemNeedsReschedule(item)) || DEFAULT_TASK_SECTION_OPEN_STATE[type];
+    accumulator[type] = DEFAULT_TASK_SECTION_OPEN_STATE[type];
     return accumulator;
   }, {});
   next[TASK_TIMELINE_SECTION] = DEFAULT_TASK_SECTION_OPEN_STATE[TASK_TIMELINE_SECTION];
