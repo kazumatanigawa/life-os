@@ -21,6 +21,7 @@ const DAY_OPS_TYPES = {
 };
 
 const TASK_TIMELINE_SECTION = "timeline";
+const FUTURE_CARRYOVER_SECTION = "futureCarryOver";
 
 const CONTACT_TOOL_OPTIONS = ["LINE", "FB", "Instagram", "電話", "直接", "その他"];
 
@@ -44,6 +45,7 @@ const DEFAULT_TASK_SECTION_OPEN_STATE = {
   [DAY_OPS_TYPES.schedule121]: false,
   [DAY_OPS_TYPES.task]: false,
   [TASK_TIMELINE_SECTION]: true,
+  [FUTURE_CARRYOVER_SECTION]: false,
 };
 
 const MISSION_SECTIONS = [
@@ -1370,6 +1372,7 @@ function buildDefaultTaskSectionState(log = getCurrentLog()) {
     return accumulator;
   }, {});
   next[TASK_TIMELINE_SECTION] = DEFAULT_TASK_SECTION_OPEN_STATE[TASK_TIMELINE_SECTION];
+  next[FUTURE_CARRYOVER_SECTION] = DEFAULT_TASK_SECTION_OPEN_STATE[FUTURE_CARRYOVER_SECTION];
   return next;
 }
 
@@ -1646,11 +1649,19 @@ function renderTaskTimeline() {
 function renderFutureCarryOverSection() {
   const section = document.getElementById("future-carryover-section");
   const list = document.getElementById("future-carryover-list");
-  if (!section || !list) {
+  const body = document.getElementById("task-section-body-futureCarryOver");
+  const summary = document.getElementById("task-section-summary-futureCarryOver");
+  if (!section || !list || !body || !summary) {
     return;
   }
   const items = getFutureCarryOverItems();
   section.classList.toggle("hidden", items.length === 0);
+  const sectionOpen = Boolean(state.ui.taskSections[FUTURE_CARRYOVER_SECTION]);
+  section.classList.toggle("has-items", items.length > 0);
+  section.classList.toggle("is-open", items.length > 0 && sectionOpen);
+  body.classList.toggle("hidden", !items.length || !sectionOpen);
+  summary.innerHTML = items.length ? `<span class="task-summary-pill has-items">${items.length}件</span>` : "";
+  summary.classList.toggle("is-empty", items.length === 0);
   if (!items.length) {
     list.innerHTML = "";
     return;
@@ -1658,16 +1669,31 @@ function renderFutureCarryOverSection() {
   list.innerHTML = items
     .map((item) => {
       const taskType = item.type === "schedule" ? DAY_OPS_TYPES.schedule121 : item.type;
+      const scheduledDate = getItemDateKey(item) || "未設定";
+      const startTime = item.startTime || "未設定";
+      const duration = getItemDurationMinutes(item) ? `${getItemDurationMinutes(item)}分` : "未設定";
       return `
         <article class="dayops-item status-${getItemStatusClass(item)} future-carryover-item ${item.isImportantToday ? "is-important" : ""}" id="future-carryover-item-${item.id}">
           <div class="dayops-item-header">
             <div class="dayops-item-content">
               <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
               <p>${escapeHtml(getTimelineSubtitle(item) || "明日以降へ移動したタスク")}</p>
+              <div class="future-carryover-schedule">
+                <div class="future-carryover-slot">
+                  <span class="future-carryover-label">予定日</span>
+                  <strong class="future-carryover-value">${escapeHtml(scheduledDate)}</strong>
+                </div>
+                <div class="future-carryover-slot">
+                  <span class="future-carryover-label">開始</span>
+                  <strong class="future-carryover-value">${escapeHtml(startTime)}</strong>
+                </div>
+                <div class="future-carryover-slot">
+                  <span class="future-carryover-label">所要時間</span>
+                  <strong class="future-carryover-value">${escapeHtml(duration)}</strong>
+                </div>
+              </div>
               <div class="dayops-item-meta">
                 <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
-                <span class="meta-chip">予定日 ${escapeHtml(getItemDateKey(item) || "未設定")}</span>
-                <span class="meta-chip">${escapeHtml(buildTimelineRange(item))}</span>
               </div>
             </div>
           </div>

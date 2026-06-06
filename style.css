@@ -1462,6 +1462,34 @@ body.nav-visible .save-fab {
   border-color: rgba(114, 171, 255, 0.24);
 }
 
+#future-carryover-section .future-carryover-schedule {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+#future-carryover-section .future-carryover-slot {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(174, 196, 228, 0.14);
+}
+
+#future-carryover-section .future-carryover-label {
+  font-size: 0.74rem;
+  color: #9aa9c2;
+  letter-spacing: 0.04em;
+}
+
+#future-carryover-section .future-carryover-value {
+  color: #f4f8ff;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
 .dayops-item {
   padding: 0.95rem 1rem;
 }
@@ -2323,6 +2351,10 @@ body.nav-visible .save-fab {
 
   .dayops-list {
     gap: 0.68rem;
+  }
+
+  #future-carryover-section .future-carryover-schedule {
+    grid-template-columns: 1fr;
   }
 
   .toolbar > .launch-day-button {
