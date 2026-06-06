@@ -1143,6 +1143,28 @@ function getPreviousIncompleteItems(dateKey = state.currentDateKey) {
     .sort(compareActionItems);
 }
 
+function getFutureCarryOverItems(dateKey = state.currentDateKey) {
+  return getAllActionItemsAcrossLogs()
+    .filter((item) => itemHasContent(item))
+    .filter((item) => !isItemDeletedOrArchived(item) && !isItemCompleted(item))
+    .filter((item) => {
+      const itemDate = getItemDateKey(item);
+      return Boolean(itemDate) && itemDate > dateKey;
+    })
+    .sort((left, right) => {
+      const baseCompare = compareActionItems(left, right);
+      if (baseCompare !== 0) {
+        return baseCompare;
+      }
+      const leftStart = left.startTime || "99:99";
+      const rightStart = right.startTime || "99:99";
+      if (leftStart !== rightStart) {
+        return leftStart.localeCompare(rightStart);
+      }
+      return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
+    });
+}
+
 function getTimelineItems(dateKey = state.currentDateKey) {
   const items = getAllActionItemsAcrossLogs()
     .filter((item) => isTaskPageVisibleItem(item, dateKey))
@@ -1621,6 +1643,43 @@ function renderTaskTimeline() {
   `;
 }
 
+function renderFutureCarryOverSection() {
+  const section = document.getElementById("future-carryover-section");
+  const list = document.getElementById("future-carryover-list");
+  if (!section || !list) {
+    return;
+  }
+  const items = getFutureCarryOverItems();
+  section.classList.toggle("hidden", items.length === 0);
+  if (!items.length) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = items
+    .map((item) => {
+      const taskType = item.type === "schedule" ? DAY_OPS_TYPES.schedule121 : item.type;
+      return `
+        <article class="dayops-item status-${getItemStatusClass(item)} future-carryover-item ${item.isImportantToday ? "is-important" : ""}" id="future-carryover-item-${item.id}">
+          <div class="dayops-item-header">
+            <div class="dayops-item-content">
+              <h4 class="dayops-item-title">${escapeHtml(buildDayOpsTitle(item))}</h4>
+              <p>${escapeHtml(getTimelineSubtitle(item) || "明日以降へ移動したタスク")}</p>
+              <div class="dayops-item-meta">
+                <span class="status-badge status-${getItemStatusClass(item)}">${escapeHtml(getTaskTypeLabel(item))}</span>
+                <span class="meta-chip">予定日 ${escapeHtml(getItemDateKey(item) || "未設定")}</span>
+                <span class="meta-chip">${escapeHtml(buildTimelineRange(item))}</span>
+              </div>
+            </div>
+          </div>
+          <div class="dayops-actions">
+            ${buildTaskActionButtons(item, { type: taskType })}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function showScreen(screen) {
   if (screen === "night" && !canEnterNight()) {
     showToast("タスクの未整理項目を完了か明日回しにしてください");
@@ -1904,17 +1963,19 @@ function renderFloatingTimelineVisibility() {
   }
   const section = document.getElementById("task-section-timeline");
   const body = document.getElementById("task-section-body-timeline");
+  const futureCarryOver = document.getElementById("future-carryover-section");
   const memo = document.getElementById("task-memo-section");
   const sourceSummary = document.getElementById("task-section-summary-timeline");
-  const active = state.activeScreen === "dayOps" && section && body && memo && !body.classList.contains("hidden");
+  const boundary = futureCarryOver && !futureCarryOver.classList.contains("hidden") ? futureCarryOver : memo;
+  const active = state.activeScreen === "dayOps" && section && body && boundary && !body.classList.contains("hidden");
   if (!active) {
     floating.classList.add("hidden");
     floating.classList.remove("visible");
     return;
   }
   const sectionRect = section.getBoundingClientRect();
-  const memoRect = memo.getBoundingClientRect();
-  const visible = sectionRect.top <= 16 && memoRect.top > 96;
+  const boundaryRect = boundary.getBoundingClientRect();
+  const visible = sectionRect.top <= 16 && boundaryRect.top > 96;
   summary.textContent = sourceSummary ? sourceSummary.innerText.replace(/\s+/g, " ").trim() : "";
   floating.classList.remove("hidden");
   floating.classList.toggle("visible", visible);
@@ -2067,7 +2128,7 @@ function getItemStatusClass(item) {
   if (isItemCompleted(item)) {
     return "done";
   }
-  if (item.status === "postponed" && getItemDateKey(item) > state.currentDateKey) {
+  if (getItemDateKey(item) > state.currentDateKey) {
     return "carryOver";
   }
   return "open";
@@ -2333,6 +2394,7 @@ function renderDayOps() {
   renderDayOpsList("schedule121-list", todayScheduleItems, DAY_OPS_TYPES.schedule121);
   renderDayOpsList("task-list", todayTaskItems, DAY_OPS_TYPES.task);
   renderTaskTimeline();
+  renderFutureCarryOverSection();
   renderTaskSection(DAY_OPS_TYPES.contact, todayContactItems);
   renderTaskSection(DAY_OPS_TYPES.schedule121, todayScheduleItems);
   renderTaskSection(DAY_OPS_TYPES.task, todayTaskItems);

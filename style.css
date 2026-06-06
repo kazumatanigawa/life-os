@@ -1440,6 +1440,28 @@ body.nav-visible .save-fab {
   border-color: rgba(144, 205, 255, 0.26);
 }
 
+#future-carryover-section {
+  background:
+    linear-gradient(145deg, rgba(32, 41, 58, 0.92), rgba(18, 24, 36, 0.94));
+  border-color: rgba(164, 184, 214, 0.16);
+}
+
+#future-carryover-section .section-heading h3 {
+  color: #dce8f8;
+}
+
+#future-carryover-section .future-carryover-item {
+  background:
+    linear-gradient(145deg, rgba(38, 48, 67, 0.92), rgba(22, 28, 42, 0.94));
+  border-color: rgba(156, 176, 208, 0.2);
+}
+
+#future-carryover-section .future-carryover-item.status-carryOver {
+  background:
+    linear-gradient(145deg, rgba(43, 58, 84, 0.94), rgba(22, 31, 47, 0.94));
+  border-color: rgba(114, 171, 255, 0.24);
+}
+
 .dayops-item {
   padding: 0.95rem 1rem;
 }
