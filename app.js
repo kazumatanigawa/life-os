@@ -1967,10 +1967,22 @@ function calculateProgress() {
 
 function updateProgressUi() {
   const progress = calculateProgress();
-  document.getElementById("progress-text").textContent = `${progress}%`;
-  document.getElementById("progress-fill").style.width = `${progress}%`;
-  document.getElementById("floating-progress-text").textContent = `${progress}%`;
-  document.getElementById("floating-progress-fill").style.width = `${progress}%`;
+  const progressText = document.getElementById("progress-text");
+  const progressFill = document.getElementById("progress-fill");
+  const floatingProgressText = document.getElementById("floating-progress-text");
+  const floatingProgressFill = document.getElementById("floating-progress-fill");
+  if (progressText) {
+    progressText.textContent = `${progress}%`;
+  }
+  if (progressFill) {
+    progressFill.style.width = `${progress}%`;
+  }
+  if (floatingProgressText) {
+    floatingProgressText.textContent = `${progress}%`;
+  }
+  if (floatingProgressFill) {
+    floatingProgressFill.style.width = `${progress}%`;
+  }
 }
 
 function renderFloatingProgressVisibility() {
@@ -2024,7 +2036,6 @@ function renderSaveFabVisibility() {
 function renderToday() {
   const log = getCurrentLog();
   syncPrimaryMit(log);
-  document.getElementById("today-title").textContent = formatMorningHeaderDate(state.currentDateKey);
   document.getElementById("week-goal").value = log.weekGoal;
   (log.topPriorities || []).forEach((item, index) => {
     const order = index + 1;
