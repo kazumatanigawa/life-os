@@ -199,13 +199,6 @@ select:focus {
   pointer-events: none;
 }
 
-.morning-hero {
-  background:
-    var(--morning-bg),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
-    var(--card);
-}
-
 .dayops-hero {
   background:
     var(--dayops-bg),
@@ -526,8 +519,139 @@ select:focus {
   color: var(--accent);
 }
 
-#week-goal {
-  min-height: 84px;
+.morning-principle-card,
+.weekly-vision-card {
+  padding: 1.05rem 1.1rem 1.15rem;
+}
+
+.morning-principle-card .section-heading p,
+.weekly-vision-card .section-heading p {
+  margin: 0;
+  color: var(--subtext);
+}
+
+.vision-principle-card {
+  border-color: rgba(212, 175, 55, 0.2);
+  background:
+    linear-gradient(180deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--card);
+}
+
+.boundary-principle-card {
+  border-color: rgba(111, 196, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(111, 196, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    var(--card);
+}
+
+.principle-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.principle-item {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  color: #f2f4f8;
+  font-size: 0.97rem;
+  line-height: 1.72;
+  letter-spacing: 0.01em;
+  word-break: break-word;
+}
+
+.principle-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.58rem;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.9);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.28);
+}
+
+.boundary-principle-card .principle-item::before {
+  background: rgba(111, 196, 255, 0.9);
+  box-shadow: 0 0 12px rgba(111, 196, 255, 0.24);
+}
+
+.weekly-vision-card {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.weekly-vision-editor,
+.weekly-vision-review-card,
+.weekly-vision-display-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weekly-vision-display-card {
+  background:
+    linear-gradient(180deg, rgba(212, 175, 55, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+  border-color: rgba(212, 175, 55, 0.16);
+}
+
+.weekly-vision-display-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.weekly-vision-week-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.34rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.weekly-vision-display-text {
+  margin: 0;
+  color: #f4f6fb;
+  font-size: 0.98rem;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.weekly-vision-notice {
+  margin: 0;
+  color: #dfe8f6;
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.weekly-vision-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.weekly-vision-field span {
+  color: var(--subtext);
+  font-size: 0.88rem;
+}
+
+#weekly-vision-text,
+#weekly-vision-reflection,
+#weekly-vision-next-action,
+#weekly-vision-achievement {
+  width: 100%;
 }
 
 .priority-editor-list {
@@ -2144,8 +2268,20 @@ body.nav-visible .save-fab {
     font-size: 0.78rem;
   }
 
-  #week-goal {
-    min-height: 58px;
+  .morning-principle-card,
+  .weekly-vision-card {
+    padding: 0.95rem;
+  }
+
+  .principle-item {
+    font-size: 0.95rem;
+    line-height: 1.74;
+  }
+
+  #weekly-vision-text,
+  #weekly-vision-reflection,
+  #weekly-vision-next-action {
+    min-height: 96px;
     padding: 0.82rem 0.9rem;
   }
 

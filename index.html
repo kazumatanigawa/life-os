@@ -85,11 +85,28 @@
 
         <section class="screen hidden" id="today-screen">
           <div class="screen-grid">
-            <article class="card morning-card span-two">
+            <article class="card morning-card span-two morning-principle-card vision-principle-card">
               <div class="section-heading">
                 <h3>VISION</h3>
+                <p>どんな人生が理想か？</p>
               </div>
-              <textarea id="week-goal" rows="2" placeholder="今週のビジョン / 最優先KPIを短く書く"></textarea>
+              <ul class="principle-list" id="morning-vision-card-content"></ul>
+            </article>
+
+            <article class="card morning-card span-two morning-principle-card boundary-principle-card">
+              <div class="section-heading">
+                <h3>何を選ばないか</h3>
+                <p>判断がぶれないための基準。</p>
+              </div>
+              <ul class="principle-list" id="morning-not-to-choose-content"></ul>
+            </article>
+
+            <article class="card morning-card span-two weekly-vision-card" id="weekly-vision-section">
+              <div class="section-heading">
+                <h3 id="weekly-vision-title">今週のVision</h3>
+                <p id="weekly-vision-description"></p>
+              </div>
+              <div id="weekly-vision-body"></div>
             </article>
 
             <article class="card morning-card span-two">

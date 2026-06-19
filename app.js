@@ -3,6 +3,7 @@ const STORAGE_KEYS = {
   dailyLogs: "lifeOS_dailyLogs",
   settings: "lifeOS_settings",
   timeMachineVisions: "lifeOS_timeMachineVisions",
+  weeklyData: "lifeOS_weeklyData",
 };
 
 const APP_VERSION = "2026-06-03-life-goal-carryover";
@@ -144,6 +145,7 @@ const DEFAULT_SETTINGS = {
 const state = {
   settings: null,
   dailyLogs: {},
+  weeklyData: null,
   appMeta: null,
   currentDateKey: "",
   selectedLogDate: "",
@@ -245,6 +247,37 @@ function createDefaultReminder(overrides = {}) {
 
 function createDefaultFutureVision() {
   return Object.fromEntries(TIME_MACHINE_FIELDS.map((field) => [field.key, ""]));
+}
+
+function createDefaultWeeklyData() {
+  return {
+    visions: {},
+    reviews: {},
+  };
+}
+
+function createDefaultWeeklyVision(weekStart, overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    weekStart,
+    visionText: "",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function createDefaultWeeklyVisionReview(weekStart, overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    weekStart,
+    achievement: "",
+    reflectionText: "",
+    nextActionText: "",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
 }
 
 function createDefaultTaskItem(type, overrides = {}) {
@@ -600,6 +633,14 @@ function hydrateFutureVision(savedFutureVision) {
   };
 }
 
+function hydrateWeeklyVision(weekStart, savedWeeklyVision) {
+  return mergeWithDefaults(createDefaultWeeklyVision(weekStart), savedWeeklyVision || {});
+}
+
+function hydrateWeeklyVisionReview(weekStart, savedWeeklyReview) {
+  return mergeWithDefaults(createDefaultWeeklyVisionReview(weekStart), savedWeeklyReview || {});
+}
+
 function hydratePriorityItem(dateKey, savedItem, index) {
   const saved = savedItem || {};
   return mergeWithDefaults(
@@ -703,6 +744,28 @@ function getDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getWeekStartMonday(dateKey = state.currentDateKey || getDateKey()) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return getDateKey(date);
+}
+
+function getWeekEndSunday(dateKey = state.currentDateKey || getDateKey()) {
+  const monday = new Date(`${getWeekStartMonday(dateKey)}T12:00:00`);
+  monday.setDate(monday.getDate() + 6);
+  return getDateKey(monday);
+}
+
+function isMonday(dateKey = state.currentDateKey || getDateKey()) {
+  return new Date(`${dateKey}T12:00:00`).getDay() === 1;
+}
+
+function isSunday(dateKey = state.currentDateKey || getDateKey()) {
+  return new Date(`${dateKey}T12:00:00`).getDay() === 0;
 }
 
 function getTomorrowDateKey(dateKey = state.currentDateKey || getDateKey()) {
@@ -872,12 +935,38 @@ function loadTimeMachineVisions(savedVisions = null) {
     .filter((entry) => entry.createdDate && entry.targetDate);
 }
 
+function loadWeeklyData(savedWeeklyData = null) {
+  const storedRaw = loadJson(STORAGE_KEYS.weeklyData, null);
+  const storedMerged = mergeWithDefaults(createDefaultWeeklyData(), storedRaw || {});
+  const appStateMerged = mergeWithDefaults(createDefaultWeeklyData(), savedWeeklyData || {});
+  const merged = {
+    visions: {
+      ...(storedMerged.visions || {}),
+      ...(appStateMerged.visions || {}),
+    },
+    reviews: {
+      ...(storedMerged.reviews || {}),
+      ...(appStateMerged.reviews || {}),
+    },
+  };
+  const visions = {};
+  Object.keys(merged.visions || {}).forEach((weekStart) => {
+    visions[weekStart] = hydrateWeeklyVision(weekStart, merged.visions[weekStart]);
+  });
+  const reviews = {};
+  Object.keys(merged.reviews || {}).forEach((weekStart) => {
+    reviews[weekStart] = hydrateWeeklyVisionReview(weekStart, merged.reviews[weekStart]);
+  });
+  return { visions, reviews };
+}
+
 function loadAppState() {
   const stored = loadJson(STORAGE_KEYS.appState, null);
   if (stored && stored.dailyData) {
     return {
       settings: loadSettings(stored.settings || null),
       dailyLogs: loadDailyLogs(stored.dailyData || {}),
+      weeklyData: loadWeeklyData(stored.weeklyData || null),
       appMeta: mergeWithDefaults(createDefaultAppMeta(), stored),
       timeMachineVisions: loadTimeMachineVisions(stored.timeMachineVisions || null),
     };
@@ -886,6 +975,7 @@ function loadAppState() {
   return {
     settings: loadSettings(),
     dailyLogs: loadDailyLogs(),
+    weeklyData: loadWeeklyData(),
     appMeta: createDefaultAppMeta(),
     timeMachineVisions: loadTimeMachineVisions(),
   };
@@ -918,12 +1008,14 @@ function saveAppState(showToastMessage = false) {
       ...state.appMeta,
       settings: state.settings,
       dailyData: state.dailyLogs,
+      weeklyData: state.weeklyData,
       timeMachineVisions: state.timeMachineVisions,
     };
 
     saveJson(STORAGE_KEYS.appState, payload);
     saveJson(STORAGE_KEYS.settings, state.settings);
     saveJson(STORAGE_KEYS.dailyLogs, state.dailyLogs);
+    saveJson(STORAGE_KEYS.weeklyData, state.weeklyData);
     saveJson(STORAGE_KEYS.timeMachineVisions, state.timeMachineVisions);
     state.saveState.status = "saved";
     renderSaveStatus();
@@ -1330,6 +1422,7 @@ function initializeState() {
   const loaded = loadAppState();
   state.settings = loaded.settings;
   state.dailyLogs = loaded.dailyLogs;
+  state.weeklyData = loaded.weeklyData || createDefaultWeeklyData();
   state.appMeta = loaded.appMeta;
   state.timeMachineVisions = loaded.timeMachineVisions || [];
   state.currentDateKey = getDateKey();
@@ -2033,10 +2126,206 @@ function renderSaveFabVisibility() {
   button.classList.toggle("hidden", !visible);
 }
 
+function formatMissionStatementLines(text) {
+  return String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function findLegacyWeekGoal(weekStart) {
+  const weekEnd = getWeekEndSunday(weekStart);
+  const log = Object.keys(state.dailyLogs)
+    .filter((dateKey) => dateKey >= weekStart && dateKey <= weekEnd)
+    .sort((left, right) => left.localeCompare(right))
+    .map((dateKey) => state.dailyLogs[dateKey])
+    .find((entry) => String(entry.weekGoal || "").trim());
+  if (!log) {
+    return null;
+  }
+  return createDefaultWeeklyVision(weekStart, {
+    visionText: log.weekGoal,
+    createdAt: log.createdAt || new Date().toISOString(),
+    updatedAt: log.updatedAt || log.createdAt || new Date().toISOString(),
+  });
+}
+
+function getWeeklyVisionEntry(dateKey = state.currentDateKey) {
+  const weekStart = getWeekStartMonday(dateKey);
+  const saved = state.weeklyData.visions[weekStart];
+  if (saved && String(saved.visionText || "").trim()) {
+    return hydrateWeeklyVision(weekStart, saved);
+  }
+  return findLegacyWeekGoal(weekStart);
+}
+
+function getWeeklyVisionReviewEntry(dateKey = state.currentDateKey) {
+  const weekStart = getWeekStartMonday(dateKey);
+  const saved = state.weeklyData.reviews[weekStart];
+  return saved ? hydrateWeeklyVisionReview(weekStart, saved) : createDefaultWeeklyVisionReview(weekStart);
+}
+
+function saveWeeklyVision() {
+  const textarea = document.getElementById("weekly-vision-text");
+  if (!textarea) {
+    return;
+  }
+  const weekStart = getWeekStartMonday();
+  const current = getWeeklyVisionEntry() || createDefaultWeeklyVision(weekStart);
+  const saved = createDefaultWeeklyVision(weekStart, {
+    ...current,
+    weekStart,
+    visionText: textarea.value.trim(),
+    createdAt: current.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  state.weeklyData.visions[weekStart] = saved;
+  getCurrentLog().weekGoal = saved.visionText;
+  persistDailyLogs(true);
+  renderToday();
+}
+
+function saveWeeklyVisionReview() {
+  const achievement = document.getElementById("weekly-vision-achievement");
+  const reflection = document.getElementById("weekly-vision-reflection");
+  const nextAction = document.getElementById("weekly-vision-next-action");
+  if (!achievement || !reflection || !nextAction) {
+    return;
+  }
+  const weekStart = getWeekStartMonday();
+  const current = getWeeklyVisionReviewEntry();
+  state.weeklyData.reviews[weekStart] = createDefaultWeeklyVisionReview(weekStart, {
+    ...current,
+    weekStart,
+    achievement: achievement.value,
+    reflectionText: reflection.value.trim(),
+    nextActionText: nextAction.value.trim(),
+    createdAt: current.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  persistDailyLogs(true);
+  renderToday();
+}
+
+function renderMorningPrinciples() {
+  const visionContainer = document.getElementById("morning-vision-card-content");
+  const boundaryContainer = document.getElementById("morning-not-to-choose-content");
+  if (visionContainer) {
+    visionContainer.innerHTML = formatMissionStatementLines(state.settings.missionStatement.vision)
+      .map((line) => `<li class="principle-item">${escapeHtml(line)}</li>`)
+      .join("");
+  }
+  if (boundaryContainer) {
+    boundaryContainer.innerHTML = formatMissionStatementLines(state.settings.missionStatement.notToChoose)
+      .map((line) => `<li class="principle-item">${escapeHtml(line)}</li>`)
+      .join("");
+  }
+}
+
+function renderWeeklyVisionSection(dateKey = state.currentDateKey) {
+  const title = document.getElementById("weekly-vision-title");
+  const description = document.getElementById("weekly-vision-description");
+  const body = document.getElementById("weekly-vision-body");
+  if (!title || !description || !body) {
+    return;
+  }
+  const weekStart = getWeekStartMonday(dateKey);
+  const isTodayMonday = isMonday(dateKey);
+  const isTodaySunday = isSunday(dateKey);
+  const weeklyVision = getWeeklyVisionEntry(dateKey);
+  const review = getWeeklyVisionReviewEntry(dateKey);
+  const visionText = weeklyVision && String(weeklyVision.visionText || "").trim();
+
+  const renderVisionDisplay = () => `
+    <div class="weekly-vision-display-card">
+      <div class="weekly-vision-display-head">
+        <span class="weekly-vision-week-label">週の起点 ${escapeHtml(weekStart)}</span>
+      </div>
+      <p class="weekly-vision-display-text">${escapeHtml(visionText || "今週のVisionはまだ設定されていません。")}</p>
+    </div>
+  `;
+
+  const renderVisionEditor = (options = {}) => `
+    <div class="weekly-vision-editor">
+      ${options.notice ? `<p class="weekly-vision-notice">${escapeHtml(options.notice)}</p>` : ""}
+      <label class="weekly-vision-field">
+        <span>${escapeHtml(options.label || "今週のVision")}</span>
+        <textarea id="weekly-vision-text" rows="4" placeholder="今週の自分が大切にするVisionを書く">${escapeHtml(
+          visionText || ""
+        )}</textarea>
+      </label>
+      <div class="action-row compact-row">
+        <button class="primary-button" id="weekly-vision-save-button" type="button">今週のVisionを保存する</button>
+      </div>
+    </div>
+  `;
+
+  const renderReviewSection = () => `
+    <div class="weekly-vision-review-card">
+      <div class="section-heading">
+        <h4>今週のVision振り返り</h4>
+        <p>今週のVisionは、実際の行動にどれだけ反映できたか。</p>
+      </div>
+      <label class="weekly-vision-field">
+        <span>達成度</span>
+        <select id="weekly-vision-achievement">
+          <option value="">選択してください</option>
+          <option value="achieved" ${review.achievement === "achieved" ? "selected" : ""}>達成できた</option>
+          <option value="mostly" ${review.achievement === "mostly" ? "selected" : ""}>ある程度できた</option>
+          <option value="not_much" ${review.achievement === "not_much" ? "selected" : ""}>あまりできなかった</option>
+          <option value="not_achieved" ${review.achievement === "not_achieved" ? "selected" : ""}>できなかった</option>
+        </select>
+      </label>
+      <label class="weekly-vision-field">
+        <span>振り返り</span>
+        <textarea id="weekly-vision-reflection" rows="4" placeholder="今週できたこと・できなかったことを書く">${escapeHtml(
+          review.reflectionText || ""
+        )}</textarea>
+      </label>
+      <label class="weekly-vision-field">
+        <span>来週に活かすこと</span>
+        <textarea id="weekly-vision-next-action" rows="3" placeholder="来週に活かすことを書く">${escapeHtml(
+          review.nextActionText || ""
+        )}</textarea>
+      </label>
+      <div class="action-row compact-row">
+        <button class="primary-button" id="weekly-vision-review-save-button" type="button">今週の振り返りを保存する</button>
+      </div>
+    </div>
+  `;
+
+  if (isTodayMonday) {
+    title.textContent = "今週のVisionを設定する";
+    description.textContent = "今週、自分はどんな方向に進むのか。最初に軸を決める。";
+    body.innerHTML = `${renderVisionEditor({ label: "今週のVision" })}${visionText ? renderVisionDisplay() : ""}`;
+    return;
+  }
+
+  if (isTodaySunday) {
+    title.textContent = "今週のVision";
+    description.textContent = "月曜日に決めた今週の軸。";
+    body.innerHTML = `${visionText ? renderVisionDisplay() : renderVisionEditor({
+      notice: "今週のVisionがまだ設定されていません。今日設定して、今週の軸を決めましょう。",
+      label: "今週のVision",
+    })}${renderReviewSection()}`;
+    return;
+  }
+
+  title.textContent = visionText ? "今週のVision" : "今週のVisionを設定する";
+  description.textContent = visionText ? "月曜日に決めた今週の軸。" : "";
+  body.innerHTML = visionText
+    ? renderVisionDisplay()
+    : renderVisionEditor({
+        notice: "今週のVisionがまだ設定されていません。今日設定して、今週の軸を決めましょう。",
+        label: "今週のVision",
+      });
+}
+
 function renderToday() {
   const log = getCurrentLog();
   syncPrimaryMit(log);
-  document.getElementById("week-goal").value = log.weekGoal;
+  renderMorningPrinciples();
+  renderWeeklyVisionSection();
   (log.topPriorities || []).forEach((item, index) => {
     const order = index + 1;
     const title = document.getElementById(`priority-${order}-title`);
@@ -2666,6 +2955,15 @@ function formatMarkdownDayOps(items, formatter) {
 
 function buildMarkdown(log) {
   const mark = (value) => (value ? "x" : " ");
+  const weeklyVision = getWeeklyVisionEntry(log.date);
+  const weeklyReview = getWeeklyVisionReviewEntry(log.date);
+  const weeklyVisionText = weeklyVision && String(weeklyVision.visionText || "").trim() ? weeklyVision.visionText : "未設定";
+  const achievementLabelMap = {
+    achieved: "達成できた",
+    mostly: "ある程度できた",
+    not_much: "あまりできなかった",
+    not_achieved: "できなかった",
+  };
   const lines = [
     "# LIFE GOAL",
     "",
@@ -2687,8 +2985,8 @@ function buildMarkdown(log) {
     `- 3年後の自分から今の自分への一言: ${log.bootSequence.timeMachine10m.futureVision.messageFromFuture}`,
     `- 未来から逆算した今日の最重要アクション: ${log.bootSequence.timeMachine10m.futureVision.todayMostImportantAction}`,
     "",
-    "## Week Goal",
-    `- ${log.weekGoal}`,
+    "## 今週のVision",
+    `- ${weeklyVisionText}`,
     "",
     "## 朝ルーティン",
     ...MORNING_ROUTINE_ITEMS.map((item) => `- [${mark(log.morningRoutine[item.key])}] ${item.label}`),
@@ -2727,6 +3025,15 @@ function buildMarkdown(log) {
     `- 何を感謝したか: ${log.gratitude.what}`,
     `- その人に今週何をするか: ${log.gratitude.weeklyAction}`,
   ];
+  if (isSunday(log.date)) {
+    lines.push(
+      "",
+      "## 今週のVision振り返り",
+      `- 達成度：${achievementLabelMap[weeklyReview.achievement] || "未設定"}`,
+      `- 振り返り：${weeklyReview.reflectionText || "未入力"}`,
+      `- 来週に活かすこと：${weeklyReview.nextActionText || "未入力"}`
+    );
+  }
   return lines.join("\n");
 }
 
@@ -2843,9 +3150,6 @@ function copyText(value) {
 function updateCurrentLogField(id, value) {
   const log = getCurrentLog();
   switch (id) {
-    case "week-goal":
-      log.weekGoal = value;
-      break;
     case "expense-memo":
       log.dayOps.expenseMemo = value;
       break;
@@ -3251,6 +3555,16 @@ function handleClick(event) {
     return;
   }
 
+  if (target.id === "weekly-vision-save-button") {
+    saveWeeklyVision();
+    return;
+  }
+
+  if (target.id === "weekly-vision-review-save-button") {
+    saveWeeklyVisionReview();
+    return;
+  }
+
   if (target.id === "add-night-task-button") {
     addNightTask();
     return;
@@ -3539,6 +3853,7 @@ function handleInput(event) {
     state.settings.missionStatement[target.dataset.settingsMission] = target.value;
     persistSettingsImmediate(false);
     renderMissionCards();
+    renderMorningPrinciples();
     return;
   }
 
